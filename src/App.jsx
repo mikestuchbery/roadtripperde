@@ -2,13 +2,9 @@ import { useState, useEffect } from "react";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
-import markerIcon from "leaflet/dist/images/markerimport { useState, useEffect } from "react";
-import "leaflet/dist/leaflet.css";
-import L from "leaflet";
-import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
-import { MapContainer, TileLayer, Polyline, Marker, Popup } from "react-leaflet";
+import { MapContainer, TileLayer, Polyline, Marker } from "react-leaflet";
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -40,6 +36,7 @@ function asArray(x) {
   if (Array.isArray(x)) return x;
   if (Array.isArray(x.pois)) return x.pois;
   if (Array.isArray(x.data)) return x.data;
+  if (Array.isArray(x.features)) return x.features;
   if (x.name) return [x];
   return [];
 }
@@ -65,17 +62,21 @@ function haversineKm(a, b) {
 }
 
 function minDistanceToRoute(poi, coords) {
-  // poi must have numeric lat/lon — guard defensively
-  if (poi.lat == null || poi.lon == null || isNaN(poi.lat) || isNaN(poi.lon)) {
-    return { distance: Infinity, index: 0 };
-  }
-  let min = Infinity, idx = 0;
-  coords.forEach((c, i) => {
-    if (!c || c[0] == null || c[1] == null) return;
+  let min = Infinity;
+  for (const c of coords) {
     const d = haversineKm({ lat: poi.lat, lon: poi.lon }, { lat: c[1], lon: c[0] });
-    if (d < min) { min = d; idx = i; }
-  });
-  return { distance: min, index: idx };
+    if (d < min) min = d;
+  }
+  return min;
+}
+
+function routePosition(poi, coords) {
+  let bestIndex = 0, bestDist = Infinity;
+  for (let i = 0; i < coords.length; i++) {
+    const d = haversineKm({ lat: poi.lat, lon: poi.lon }, { lat: coords[i][1], lon: coords[i][0] });
+    if (d < bestDist) { bestDist = d; bestIndex = i; }
+  }
+  return bestIndex / coords.length;
 }
 
 /* ========= WIKI IMAGE ========= */
@@ -85,7 +86,7 @@ async function fetchWikiImage(title) {
     const sj = await s.json();
     const page = sj.query.search[0];
     if (!page) return null;
-    const p = await fetch(`https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(page.title)}&prop=pageimages&pithumbsize=900&format=json&origin=*`);
+    const p = await fetch(`https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(page.title)}&prop=pageimages&pithumbsize=800&format=json&origin=*`);
     const pj = await p.json();
     const pg = Object.values(pj.query.pages)[0];
     return pg.thumbnail?.source || null;
@@ -95,170 +96,127 @@ async function fetchWikiImage(title) {
 /* ========= DRIVING SCENE ========= */
 function DrivingScene() {
   return (
-    <div className="scene" aria-hidden="true">
-      <div className="scene-sky">
-        <div className="scene-sun" />
-        <div className="scene-cloud scene-cloud--a" />
-        <div className="scene-cloud scene-cloud--b" />
-        <div className="scene-cloud scene-cloud--c" />
+    <div className="driving-scene" aria-hidden="true">
+      <div className="sky">
+        <div className="sun" />
+        <div className="cloud cloud-1" />
+        <div className="cloud cloud-2" />
+        <div className="cloud cloud-3" />
       </div>
-      <div className="scene-hill scene-hill--far" />
-      <div className="scene-hill scene-hill--near" />
-      <div className="scene-treeline">
-        {[...Array(10)].map((_, i) => (
-          <div key={i} className="scene-tree" style={{ animationDelay: `${(i * -0.9).toFixed(1)}s` }}>
-            <div className="scene-trunk" />
-            <div className="scene-canopy" />
+      <div className="hills">
+        <div className="hill hill-far" />
+        <div className="hill hill-near" />
+      </div>
+      <div className="trees">
+        {[...Array(8)].map((_, i) => (
+          <div key={i} className="tree" style={{ animationDelay: `${i * -1.1}s` }}>
+            <div className="tree-trunk" />
+            <div className="tree-top" />
           </div>
         ))}
       </div>
-      <div className="scene-road">
-        {[...Array(7)].map((_, i) => (
-          <div key={i} className="scene-dash" style={{ animationDelay: `${(i * -0.45).toFixed(2)}s` }} />
-        ))}
-      </div>
-      <div className="scene-car">
-        <div className="scene-car-body">
-          <div className="scene-car-roof" />
-          <div className="scene-win scene-win--rear" />
-          <div className="scene-win scene-win--front" />
-          <div className="scene-headlight" />
+      <div className="road">
+        <div className="road-lines">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="road-dash" style={{ animationDelay: `${i * -0.5}s` }} />
+          ))}
         </div>
-        <div className="scene-wheel scene-wheel--rear" />
-        <div className="scene-wheel scene-wheel--front" />
-        <div className="scene-puff scene-puff--a" />
-        <div className="scene-puff scene-puff--b" />
+      </div>
+      <div className="car">
+        <div className="car-body">
+          <div className="car-roof" />
+          <div className="car-window car-window-front" />
+          <div className="car-window car-window-rear" />
+        </div>
+        <div className="wheel wheel-front" />
+        <div className="wheel wheel-rear" />
+        <div className="puff puff-1" />
+        <div className="puff puff-2" />
       </div>
     </div>
   );
 }
 
-/* ========= CARD ========= */
-function Card({ poi, index }) {
-  const name    = poi.name ?? poi.title ?? "Site";
-  const era     = poi.era ?? poi.century ?? "";
-  const type    = poi.type ?? poi.category ?? "";
-  const summary = poi.summary ?? poi.description ?? "";
-  const [img, setImg]       = useState(null);
-  const [loaded, setLoaded] = useState(false);
-
+/* ========= STOP CARD ========= */
+function Card({ name, era, summary, type, index }) {
+  const [img, setImg] = useState(null);
+  const [imgLoaded, setImgLoaded] = useState(false);
   useEffect(() => { fetchWikiImage(name).then(setImg); }, [name]);
-
-  const wikiUrl = `https://en.wikipedia.org/wiki/${encodeURIComponent(name)}`;
-
+  const wiki = `https://en.wikipedia.org/wiki/${encodeURIComponent(name)}`;
   return (
-    <div className="card" style={{ animationDelay: `${index * 0.06}s` }}>
-      {img ? (
-        <div className="card-hero">
-          <img
-            src={img} alt={name}
-            className={`card-hero-img${loaded ? " card-hero-img--in" : ""}`}
-            onLoad={() => setLoaded(true)}
-          />
-          <div className="card-hero-fade" />
-          <div className="card-hero-num">{index + 1}</div>
+    <div className="stop-card" style={{ animationDelay: `${index * 0.07}s` }}>
+      <div className="stop-badge">{index + 1}</div>
+      <div className="card-inner">
+        {img && (
+          <div className="card-img-wrap">
+            <img src={img} alt={name}
+              className={`card-img ${imgLoaded ? "loaded" : ""}`}
+              onLoad={() => setImgLoaded(true)} />
+            <div className="card-img-fade" />
+          </div>
+        )}
+        <div className="card-body">
+          <div className="pill-row">
+            {type && <span className="pill">{type}</span>}
+            {era && <span className="pill pill-era">{era}</span>}
+          </div>
+          <div className="card-title">{name}</div>
+          {summary && <p className="card-text">{summary}</p>}
+          <a href={wiki} target="_blank" rel="noreferrer" className="card-link">Wikipedia →</a>
         </div>
-      ) : (
-        <div className="card-noimg-num">{index + 1}</div>
-      )}
-      <div className="card-body">
-        <div className="card-pills">
-          {type && <span className="pill">{type}</span>}
-          {era  && <span className="pill pill--era">{era}</span>}
-        </div>
-        <h2 className="card-title">{name}</h2>
-        {summary && <p className="card-summary">{summary}</p>}
-        <a href={wikiUrl} target="_blank" rel="noreferrer" className="card-link">
-          More info →
-        </a>
       </div>
     </div>
   );
 }
 
-/* ========= JOURNEY MAP ========= */
-function JourneyMap({ routeCoords, stops, startName, endName }) {
-  if (!routeCoords?.length || !stops?.length) return null;
-
-  // Centre on the midpoint of the route
-  const mid = routeCoords[Math.floor(routeCoords.length / 2)];
-
-  // Google Maps: start / waypoints / end
-  // Waypoints are the stops in between (all except start/end cities which are separate)
-  const waypointStr = stops
-    .map(p => `${p.lat},${p.lon}`)
-    .join("|");
-  const googleUrl =
-    `https://www.google.com/maps/dir/?api=1` +
-    `&origin=${encodeURIComponent(startName)}` +
-    `&destination=${encodeURIComponent(endName)}` +
-    `&waypoints=${encodeURIComponent(waypointStr)}` +
-    `&travelmode=driving`;
-
-  // Apple Maps: chain daddr with `+to:` for multi-stop
-  // Format: saddr -> first stop -> ... -> endName
-  const allPoints = [startName, ...stops.map(p => `${p.lat},${p.lon}`), endName];
-  const appleUrl =
-    `https://maps.apple.com/?saddr=${encodeURIComponent(allPoints[0])}` +
-    allPoints.slice(1).map(pt => `&daddr=${encodeURIComponent(pt)}`).join("") +
-    `&dirflg=d`;
-
+/* ========= MAP CARD ========= */
+function JourneyMap({ coords, pois, start, end }) {
+  if (!coords?.length || !pois?.length) return null;
+  const stopParts = pois.map(p => `${p.lat ?? p.latitude},${p.lon ?? p.longitude}`).join("/");
+  const googleUrl = `https://www.google.com/maps/dir/${encodeURIComponent(start)}/${stopParts}/${encodeURIComponent(end)}`;
+  const appleUrl = `https://maps.apple.com/?saddr=${encodeURIComponent(start)}&daddr=${encodeURIComponent(end)}&dirflg=d`;
+  const center = coords[Math.floor(coords.length / 2)];
   return (
     <div className="map-card">
       <div className="map-card-header">
         <span className="map-card-icon">◎</span>
         <span>Journey map</span>
       </div>
-
-      {/* Leaflet map — full bleed */}
-      <div className="map-viewport">
-        <MapContainer
-          style={{ height: "100%", width: "100%" }}
-          center={[mid[1], mid[0]]}
-          zoom={6}
-          scrollWheelZoom={false}
-          zoomControl={true}
-        >
-          <TileLayer
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            attribution=""
-          />
-          {/* Route polyline */}
+      <div style={{ height: 300 }}>
+        <MapContainer style={{ height: "100%" }} center={[center[1], center[0]]} zoom={6} scrollWheelZoom={false}>
+          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="" />
           <Polyline
-            positions={routeCoords.map(c => [c[1], c[0]])}
-            pathOptions={{ color: "#C04830", weight: 3, opacity: 0.85, dashArray: "8 5" }}
+            positions={coords.map(c => [c[1], c[0]])}
+            pathOptions={{ color: "#B84228", weight: 3, opacity: 0.85, dashArray: "8 5" }}
           />
-          {/* Stop markers with popup name */}
-          {stops.map((p, i) => (
-            <Marker key={i} position={[p.lat, p.lon]}>
-              <Popup>{p.name ?? p.title ?? "Stop"}</Popup>
-            </Marker>
+          {pois.map((p, i) => (
+            <Marker key={i} position={[p.lat ?? p.latitude, p.lon ?? p.longitude]} />
           ))}
         </MapContainer>
       </div>
-
-      {/* Map action buttons */}
       <div className="map-card-footer">
-        <a href={googleUrl} target="_blank" rel="noreferrer" className="maps-btn maps-btn--google">
-          Open in Google Maps →
-        </a>
-        <a href={appleUrl} target="_blank" rel="noreferrer" className="maps-btn maps-btn--apple">
-          Open in Apple Maps →
-        </a>
+        <a href={googleUrl} target="_blank" rel="noreferrer" className="map-btn map-btn-google">Open in Google Maps →</a>
+        <a href={appleUrl} target="_blank" rel="noreferrer" className="map-btn map-btn-apple">Open in Apple Maps →</a>
       </div>
     </div>
   );
 }
 
+/* ========= KO-FI ========= */
+function KofiButton() {
+  return (
+    <a href="https://buymeacoffee.com/mikestuchbery" target="_blank" rel="noopener noreferrer" className="kofi-btn">☕</a>
+  );
+}
+
 /* ========= APP ========= */
 export default function App() {
-  const [start, setStart]          = useState("");
-  const [end, setEnd]              = useState("");
-  const [pois, setPois]            = useState([]);
-  const [routeCoords, setCoords]   = useState([]);
-  const [visibleCount, setVisible] = useState(8);
-  const [loading, setLoading]      = useState(false);
-  const [hasSearched, setSearched] = useState(false);
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
+  const [pois, setPois] = useState([]);
+  const [coords, setCoords] = useState([]);
+  const [visibleCount, setVisibleCount] = useState(8);
+  const [loading, setLoading] = useState(false);
 
   async function geocode(place) {
     const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(place)}`);
@@ -266,1146 +224,261 @@ export default function App() {
     return { lat: +j[0].lat, lon: +j[0].lon };
   }
 
-  async function fetchRoute(a, b) {
+  async function route(a, b) {
     const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${a.lon},${a.lat};${b.lon},${b.lat}?overview=full&geometries=geojson`);
     const j = await r.json();
-    return j.routes[0].geometry.coordinates; // [lon, lat] pairs
+    return j.routes[0].geometry.coordinates;
   }
 
   async function findStops() {
     if (!start || !end) return;
-    setLoading(true); setPois([]); setCoords([]); setSearched(true);
+    setLoading(true); setPois([]); setCoords([]);
     try {
       const A = await geocode(start);
       const B = await geocode(end);
-      const coords = await fetchRoute(A, B);
-      setCoords(coords);
-
-      const candidates = [];
-      ALL_POIS.forEach(p => {
-        const lat = parseFloat(p.lat ?? p.latitude);
-        const lon = parseFloat(p.lon ?? p.longitude);
-        if (!isFinite(lat) || !isFinite(lon)) return;
-        const { distance, index } = minDistanceToRoute({ lat, lon }, coords);
-        if (distance <= 25) candidates.push({ ...p, lat, lon, routeIndex: index });
-      });
-
-      candidates.sort((a, b) => a.routeIndex - b.routeIndex);
+      const routeCoords = await route(A, B);
+      setCoords(routeCoords);
+      const near = ALL_POIS.map((p) => {
+        const lat = p.lat ?? p.latitude, lon = p.lon ?? p.longitude;
+        if (!lat || !lon) return null;
+        const dist = minDistanceToRoute({ lat, lon }, routeCoords);
+        if (dist > 25) return null;
+        return { ...p, lat, lon, pos: routePosition({ lat, lon }, routeCoords) };
+      }).filter(Boolean).sort((a, b) => a.pos - b.pos);
       const routeKm = haversineKm(A, B);
-      setPois(candidates);
-      setVisible(routeKm < 100 ? 4 : 8);
+      setPois(near);
+      setVisibleCount(routeKm < 100 ? 4 : 8);
     } catch (e) { alert(e.message); }
     setLoading(false);
   }
 
-  const onKey = e => { if (e.key === "Enter") findStops(); };
+  const handleKey = (e) => { if (e.key === "Enter") findStops(); };
   const shown = pois.slice(0, visibleCount);
 
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Lora:ital,wght@0,400;1,400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap');
-
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Libre+Baskerville:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        html { font-size: 16px; -webkit-tap-highlight-color: transparent; }
         body {
-          font-family: 'DM Sans', sans-serif;
-          background: #E8DEC6;
-          min-height: 100dvh;
-          overscroll-behavior: none;
+          background-color: #EDE4CF;
+          background-image: radial-gradient(ellipse at 15% 0%, rgba(184,147,90,0.12) 0%, transparent 55%), radial-gradient(ellipse at 85% 100%, rgba(120,75,35,0.08) 0%, transparent 55%);
+          min-height: 100vh;
         }
-        .page {
-          min-height: 100dvh;
-          padding-bottom: env(safe-area-inset-bottom, 24px);
-        }
+        .page { max-width: 600px; margin: 0 auto; padding: 0 20px 80px; font-family: 'DM Sans', sans-serif; }
 
-        /* ── HERO ── */
-        .hero {
-          background: #1C1208;
-          padding: 52px 20px 0;
-          position: relative;
-          overflow: hidden;
-        }
-        .hero::before {
-          content: '';
-          position: absolute; inset: 0;
-          background:
-            radial-gradient(ellipse at 30% 0%, rgba(184,130,50,.22) 0%, transparent 60%),
-            radial-gradient(ellipse at 80% 80%, rgba(120,60,20,.18) 0%, transparent 50%);
-          pointer-events: none;
-        }
-        .hero-eyebrow {
-          font-size: 10px; font-weight: 500; letter-spacing: .26em;
-          text-transform: uppercase; color: #B8924A;
-          text-align: center; margin-bottom: 10px; position: relative;
-        }
-        .hero-title {
-          font-family: 'Playfair Display', serif;
-          font-size: clamp(48px, 13vw, 72px);
-          font-weight: 700; color: #F5EDDA;
-          text-align: center; letter-spacing: -.02em; line-height: .95;
-          position: relative;
-        }
-        .hero-title em { font-style: italic; color: #D4A050; }
-        .hero-sub {
-          font-family: 'Lora', serif; font-style: italic;
-          font-size: 14px; color: #9A8060;
-          text-align: center; margin-top: 10px; position: relative;
-        }
+        /* HEADER */
+        .header { padding: 48px 0 0; text-align: center; }
+        .header-rule { height: 1px; background: linear-gradient(to right, transparent, #C4A870, transparent); }
+        .eyebrow { font-size: 10.5px; font-weight: 500; letter-spacing: 0.22em; text-transform: uppercase; color: #9A7A48; margin-bottom: 10px; }
+        .headline { font-family: 'Playfair Display', serif; font-size: 56px; font-weight: 700; color: #241A0C; letter-spacing: -0.015em; line-height: 1.05; margin-bottom: 10px; }
+        .subhead { font-family: 'Libre Baskerville', serif; font-style: italic; font-size: 14.5px; color: #7A6040; }
+        .header-top { padding-bottom: 20px; }
 
-        /* ── DRIVING SCENE ── */
-        .scene {
-          position: relative; height: 100px;
-          overflow: hidden; margin-top: 20px;
-        }
-        .scene-sky {
-          position: absolute; inset: 0;
-          background: linear-gradient(180deg, #7AAECC 0%, #B8D8EC 50%, #D4A84A 100%);
-        }
-        .scene-sun {
-          position: absolute; top: 10px; right: 48px;
-          width: 20px; height: 20px; border-radius: 50%;
-          background: radial-gradient(circle, #FFE860 20%, #FFB020 100%);
-          box-shadow: 0 0 18px 6px rgba(255,190,40,.5);
-        }
-        .scene-cloud {
-          position: absolute; background: rgba(255,255,255,.82);
-          border-radius: 40px; animation: cloud linear infinite;
-        }
-        .scene-cloud::before, .scene-cloud::after {
-          content: ''; position: absolute;
-          background: rgba(255,255,255,.82); border-radius: 50%;
-        }
-        .scene-cloud--a { width: 58px; height: 14px; top: 12px; animation-duration: 15s; animation-delay: -3s; }
-        .scene-cloud--a::before { width: 26px; height: 20px; top: -11px; left: 9px; }
-        .scene-cloud--a::after  { width: 18px; height: 16px; top: -7px;  left: 26px; }
-        .scene-cloud--b { width: 44px; height: 12px; top: 20px; animation-duration: 21s; animation-delay: -9s; }
-        .scene-cloud--b::before { width: 20px; height: 17px; top: -9px; left: 7px; }
-        .scene-cloud--b::after  { width: 15px; height: 13px; top: -6px; left: 20px; }
-        .scene-cloud--c { width: 50px; height: 13px; top: 8px; animation-duration: 18s; animation-delay: -13s; }
-        .scene-cloud--c::before { width: 22px; height: 18px; top: -10px; left: 11px; }
-        .scene-cloud--c::after  { width: 16px; height: 14px; top: -6px;  left: 26px; }
-        @keyframes cloud { from { transform: translateX(120vw); } to { transform: translateX(-200px); } }
-        .scene-hill { position: absolute; border-radius: 50%; bottom: 28px; }
-        .scene-hill--far  { width: 55vw; height: 70px; background: #6A9A58; animation: hill-far 11s linear infinite; }
-        .scene-hill--near { width: 42vw; height: 52px; background: #507A40; animation: hill-near 7.5s linear infinite; bottom: 27px; }
-        @keyframes hill-far  { from { left: 110%; } to { left: -60%; } }
-        @keyframes hill-near { from { left: 110%; } to { left: -50%; } }
-        .scene-treeline { position: absolute; bottom: 26px; left: 0; right: 0; height: 44px; }
-        .scene-tree { position: absolute; bottom: 0; animation: tree 3.2s linear infinite; }
-        @keyframes tree { from { left: 110%; } to { left: -30px; } }
-        .scene-trunk  { width: 5px; height: 12px; background: #5A3C18; margin: 0 auto; border-radius: 2px; }
-        .scene-canopy { width: 0; height: 0; border-left: 11px solid transparent; border-right: 11px solid transparent; border-bottom: 24px solid #2A6020; position: absolute; top: -17px; left: -8px; }
-        .scene-canopy::after { content: ''; position: absolute; width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 18px solid #347028; top: -7px; left: -8px; }
-        .scene-road { position: absolute; bottom: 0; left: 0; right: 0; height: 28px; background: linear-gradient(180deg, #7A7A7A 0%, #686868 100%); border-top: 2px solid #929292; display: flex; align-items: center; overflow: hidden; }
-        .scene-dash { flex-shrink: 0; width: 36px; height: 3px; background: #F0D840; border-radius: 2px; margin-right: 28px; animation: dash .65s linear infinite; }
-        @keyframes dash { from { transform: translateX(64px); } to { transform: translateX(-64px); } }
-        .scene-car { position: absolute; bottom: 8px; left: 26%; animation: bob .32s ease-in-out infinite alternate; }
-        @keyframes bob { from { transform: translateY(0); } to { transform: translateY(-2px); } }
-        .scene-car-body { position: relative; width: 64px; height: 20px; background: #C04830; border-radius: 3px 4px 2px 2px; }
-        .scene-car-roof { position: absolute; top: -13px; left: 10px; width: 38px; height: 15px; background: #A03820; border-radius: 5px 5px 0 0; }
-        .scene-win { position: absolute; top: -10px; height: 9px; background: rgba(160,210,240,.88); border-radius: 2px 2px 0 0; }
-        .scene-win--front { width: 14px; left: 34px; }
-        .scene-win--rear  { width: 13px; left: 16px; }
-        .scene-headlight { position: absolute; right: 2px; top: 6px; width: 4px; height: 5px; background: #FFE880; border-radius: 1px; box-shadow: 0 0 6px 2px rgba(255,230,80,.6); }
-        .scene-wheel { position: absolute; bottom: -6px; width: 13px; height: 13px; border-radius: 50%; background: #1A1A1A; border: 2px solid #444; animation: spin .38s linear infinite; }
-        .scene-wheel--front { right: 7px; } .scene-wheel--rear { left: 7px; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .scene-puff { position: absolute; border-radius: 50%; background: rgba(210,210,210,.5); animation: puff .65s ease-out infinite; }
-        .scene-puff--a { width: 9px; height: 9px; bottom: 4px; left: -9px; }
-        .scene-puff--b { width: 6px; height: 6px; bottom: 6px; left: -16px; animation-delay: .32s; }
-        @keyframes puff { 0% { opacity: .7; transform: scale(.5) translateX(0); } 100% { opacity: 0; transform: scale(1.8) translateX(-12px); } }
+        /* DRIVING SCENE */
+        .driving-scene { position: relative; height: 110px; overflow: hidden; border-radius: 10px; margin: 18px 0 0; border: 1px solid #DCCAA4; }
+        .sky { position: absolute; inset: 0; background: linear-gradient(to bottom, #B8D4E8 0%, #D8EAF4 55%, #E8C890 100%); }
+        .sun { position: absolute; top: 12px; right: 60px; width: 22px; height: 22px; border-radius: 50%; background: radial-gradient(circle, #FFE870 0%, #FFB830 100%); box-shadow: 0 0 16px 4px rgba(255,200,60,0.45); }
+        .cloud { position: absolute; background: rgba(255,255,255,0.88); border-radius: 50px; animation: cloudScroll linear infinite; }
+        .cloud::before, .cloud::after { content: ''; position: absolute; background: rgba(255,255,255,0.88); border-radius: 50%; }
+        .cloud-1 { width: 64px; height: 16px; top: 14px; animation-duration: 16s; }
+        .cloud-1::before { width: 28px; height: 22px; top: -12px; left: 10px; }
+        .cloud-1::after  { width: 20px; height: 18px; top: -8px; left: 30px; }
+        .cloud-2 { width: 48px; height: 13px; top: 22px; animation-duration: 22s; animation-delay: -7s; }
+        .cloud-2::before { width: 22px; height: 18px; top: -10px; left: 8px; }
+        .cloud-2::after  { width: 16px; height: 14px; top: -6px; left: 22px; }
+        .cloud-3 { width: 54px; height: 14px; top: 10px; animation-duration: 19s; animation-delay: -12s; }
+        .cloud-3::before { width: 24px; height: 20px; top: -11px; left: 12px; }
+        .cloud-3::after  { width: 18px; height: 15px; top: -7px; left: 28px; }
+        @keyframes cloudScroll { from { transform: translateX(660px); } to { transform: translateX(-120px); } }
+        .hills { position: absolute; bottom: 30px; left: 0; right: 0; height: 60px; }
+        .hill { position: absolute; border-radius: 50%; }
+        .hill-far { width: 260px; height: 80px; background: #7AAA6A; bottom: 0; left: 40%; animation: hillFar 12s linear infinite; }
+        .hill-near { width: 200px; height: 60px; background: #5A8A4A; bottom: 0; left: 60%; animation: hillNear 8s linear infinite; }
+        @keyframes hillFar  { from { transform: translateX(400px); } to { transform: translateX(-300px); } }
+        @keyframes hillNear { from { transform: translateX(400px); } to { transform: translateX(-250px); } }
+        .trees { position: absolute; bottom: 28px; left: 0; right: 0; height: 50px; }
+        .tree { position: absolute; bottom: 0; animation: treeScroll 3.5s linear infinite; }
+        @keyframes treeScroll { from { transform: translateX(640px); } to { transform: translateX(-40px); } }
+        .tree-trunk { width: 6px; height: 14px; background: #6B4A2A; margin: 0 auto; border-radius: 2px; }
+        .tree-top { width: 0; height: 0; border-left: 13px solid transparent; border-right: 13px solid transparent; border-bottom: 28px solid #2E6E28; position: absolute; top: -20px; left: -10px; }
+        .tree-top::after { content: ''; position: absolute; width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-bottom: 22px solid #3A8034; top: -8px; left: -10px; }
+        .road { position: absolute; bottom: 0; left: 0; right: 0; height: 32px; background: linear-gradient(to bottom, #888 0%, #777 100%); border-top: 2px solid #AAA; }
+        .road-lines { position: absolute; top: 50%; transform: translateY(-50%); left: 0; right: 0; display: flex; overflow: hidden; }
+        .road-dash { flex-shrink: 0; width: 40px; height: 4px; background: #FFE060; margin-right: 30px; border-radius: 2px; animation: dashScroll 0.7s linear infinite; }
+        @keyframes dashScroll { from { transform: translateX(70px); } to { transform: translateX(-70px); } }
+        .car { position: absolute; bottom: 10px; left: 28%; animation: carBob 0.35s ease-in-out infinite alternate; }
+        @keyframes carBob { from { transform: translateY(0); } to { transform: translateY(-1.5px); } }
+        .car-body { position: relative; width: 72px; height: 22px; background: #B84228; border-radius: 4px 4px 2px 2px; }
+        .car-roof { position: absolute; top: -14px; left: 12px; width: 42px; height: 16px; background: #962E18; border-radius: 6px 6px 0 0; }
+        .car-window { position: absolute; top: -11px; height: 10px; background: rgba(180,220,255,0.85); border-radius: 3px 3px 0 0; }
+        .car-window-front { width: 16px; left: 38px; }
+        .car-window-rear  { width: 14px; left: 18px; }
+        .wheel { position: absolute; bottom: -7px; width: 14px; height: 14px; border-radius: 50%; background: #222; border: 2px solid #555; animation: wheelSpin 0.4s linear infinite; }
+        .wheel-front { right: 8px; } .wheel-rear { left: 8px; }
+        @keyframes wheelSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .puff { position: absolute; border-radius: 50%; background: rgba(200,200,200,0.55); animation: puffOut 0.7s ease-out infinite; }
+        .puff-1 { width: 10px; height: 10px; bottom: 4px; left: -10px; }
+        .puff-2 { width: 7px; height: 7px; bottom: 6px; left: -18px; animation-delay: 0.35s; }
+        @keyframes puffOut { 0% { opacity: 0.7; transform: scale(0.6) translateX(0); } 100% { opacity: 0; transform: scale(1.6) translateX(-10px); } }
 
-        /* ── SEARCH ── */
-        .search-panel {
-          background: #1C1208;
-          padding: 20px 20px 28px;
-        }
-        .search-label { font-size: 9.5px; font-weight: 500; letter-spacing: .22em; text-transform: uppercase; color: #7A6035; margin-bottom: 12px; }
-        .search-inputs { display: flex; flex-direction: column; margin-bottom: 14px; border-radius: 10px; overflow: hidden; border: 1.5px solid #3A2A10; }
-        .search-input-wrap { position: relative; display: flex; align-items: center; background: #261C0C; }
-        .search-input-wrap + .search-input-wrap { border-top: 1px solid #3A2A10; }
-        .search-input-icon { padding: 0 4px 0 16px; color: #B8924A; font-size: 12px; flex-shrink: 0; }
-        .search-input { flex: 1; padding: 15px 14px 15px 6px; background: transparent; border: none; font-family: 'DM Sans', sans-serif; font-size: 16px; color: #F0E4C8; outline: none; }
-        .search-input::placeholder { color: #5A4828; font-style: italic; }
-        .search-btn { width: 100%; padding: 16px; border: none; border-radius: 10px; background: #C04830; color: #FFF4E0; font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 500; letter-spacing: .06em; cursor: pointer; transition: background .18s, transform .12s; -webkit-appearance: none; touch-action: manipulation; }
-        .search-btn:active { background: #A03820; transform: scale(.98); }
+        /* SEARCH */
+        .search-card { background: #FAF5E8; border: 1px solid #DCCAA4; border-radius: 14px; padding: 22px; margin: 18px 0 36px; box-shadow: 0 4px 28px rgba(60,35,10,0.09), 0 1px 4px rgba(60,35,10,0.05); }
+        .search-label { font-size: 10px; font-weight: 500; letter-spacing: 0.2em; text-transform: uppercase; color: #9A7A48; margin-bottom: 14px; }
+        .input-stack { margin-bottom: 14px; }
+        .input-wrap { position: relative; display: flex; align-items: center; }
+        .input-icon { position: absolute; left: 13px; color: #B8904E; font-size: 12px; pointer-events: none; z-index: 1; }
+        .input-field { width: 100%; padding: 13px 13px 13px 34px; border-radius: 8px; border: 1.5px solid #DCCAA4; background: #FFFCF2; font-family: 'DM Sans', sans-serif; font-size: 14.5px; color: #241A0C; transition: border-color 0.2s, box-shadow 0.2s; }
+        .input-field:focus { outline: none; border-color: #B8904E; box-shadow: 0 0 0 3px rgba(184,144,78,0.14); }
+        .input-field::placeholder { color: #B8A07A; font-style: italic; }
+        .input-divider { text-align: center; color: #C8AB78; font-size: 15px; padding: 5px 0; }
+        .explore-btn { width: 100%; padding: 13px 24px; border-radius: 8px; border: none; background: #B84228; color: #FFF8EE; font-family: 'DM Sans', sans-serif; font-size: 13.5px; font-weight: 500; letter-spacing: 0.07em; cursor: pointer; transition: background 0.18s, transform 0.14s, box-shadow 0.18s; box-shadow: 0 4px 16px rgba(184,66,40,0.28); }
+        .explore-btn:hover { background: #962E18; transform: translateY(-1px); box-shadow: 0 7px 22px rgba(184,66,40,0.36); }
+        .explore-btn:active { transform: translateY(0); }
 
-        /* ── CONTENT ── */
-        .content { padding: 24px 16px 0; }
+        /* RESULTS */
+        .results-heading { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+        .results-rule { flex: 1; height: 1px; background: #DCCAA4; }
+        .results-label { font-size: 10px; font-weight: 500; letter-spacing: 0.2em; text-transform: uppercase; color: #9A7A48; white-space: nowrap; }
 
-        /* ── LOADING ── */
-        .loading { display: flex; flex-direction: column; align-items: center; padding: 56px 0; gap: 16px; }
-        .loading-text { font-family: 'Lora', serif; font-style: italic; font-size: 16px; color: #8A7040; }
-        .loading-dots { display: flex; gap: 7px; }
-        .loading-dot { width: 9px; height: 9px; border-radius: 50%; background: #B8924A; animation: dotpulse 1.2s ease-in-out infinite; }
-        @keyframes dotpulse { 0%, 100% { opacity: .2; transform: scale(.7); } 50% { opacity: 1; transform: scale(1.2); } }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
+        .stop-card { position: relative; padding-left: 42px; margin-bottom: 18px; animation: fadeUp 0.45s ease both; }
+        .stop-badge { position: absolute; left: 0; top: 16px; width: 28px; height: 28px; border-radius: 50%; background: #241A0C; color: #F0DDB8; font-size: 11px; font-weight: 500; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(36,26,12,0.35); }
+        .card-inner { background: #FAF5E8; border: 1px solid #DCCAA4; border-radius: 11px; overflow: hidden; box-shadow: 0 2px 14px rgba(60,35,10,0.07); transition: box-shadow 0.2s, transform 0.2s; }
+        .card-inner:hover { box-shadow: 0 6px 24px rgba(60,35,10,0.12); transform: translateY(-2px); }
+        .card-img-wrap { position: relative; overflow: hidden; }
+        .card-img { width: 100%; height: 200px; object-fit: cover; display: block; opacity: 0; transition: opacity 0.5s ease, transform 0.4s ease; }
+        .card-img.loaded { opacity: 1; }
+        .card-inner:hover .card-img { transform: scale(1.03); }
+        .card-img-fade { position: absolute; bottom: 0; left: 0; right: 0; height: 64px; background: linear-gradient(to bottom, transparent, rgba(36,26,12,0.28)); pointer-events: none; }
+        .card-body { padding: 14px 16px 16px; }
+        .pill-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+        .pill { background: #EDE0BE; color: #6A4E20; border: 1px solid #D4BE90; padding: 3px 8px; font-size: 9.5px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; border-radius: 4px; }
+        .pill-era { background: #F4EDD5; color: #8A6228; }
+        .card-title { font-family: 'Playfair Display', serif; font-size: 19px; font-weight: 700; color: #241A0C; line-height: 1.2; letter-spacing: -0.01em; margin-bottom: 7px; }
+        .card-text { font-size: 13.5px; color: #5A4228; line-height: 1.65; margin-bottom: 12px; }
+        .card-link { font-size: 12px; font-weight: 500; letter-spacing: 0.04em; color: #B84228; text-decoration: none; transition: color 0.15s, letter-spacing 0.15s; }
+        .card-link:hover { color: #962E18; letter-spacing: 0.06em; }
 
-        /* ── RESULTS HEADER ── */
-        .results-header { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
-        .results-rule { flex: 1; height: 1px; background: #C8B888; }
-        .results-count { font-size: 9.5px; font-weight: 500; letter-spacing: .2em; text-transform: uppercase; color: #8A7040; white-space: nowrap; }
+        .load-more { width: 100%; margin: 4px 0 24px; padding: 13px; background: transparent; border: 1.5px dashed #C8AB78; border-radius: 9px; color: #8A6A30; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; letter-spacing: 0.04em; cursor: pointer; transition: background 0.18s, border-color 0.18s; }
+        .load-more:hover { background: rgba(200,171,120,0.12); border-color: #B8904E; }
 
-        /* ── CARD ── */
-        @keyframes cardIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        .card { background: #FAF4E4; border-radius: 14px; overflow: hidden; margin-bottom: 16px; box-shadow: 0 2px 12px rgba(30,16,4,.1), 0 1px 3px rgba(30,16,4,.07); animation: cardIn .42s ease both; outline: 1px solid rgba(180,150,80,.18); }
-        .card-hero { position: relative; height: 220px; overflow: hidden; }
-        .card-hero-img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0; transition: opacity .5s ease, transform .4s ease; transform: scale(1.04); }
-        .card-hero-img--in { opacity: 1; transform: scale(1); }
-        .card-hero-fade { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 40%, rgba(20,10,2,.55) 100%); }
-        .card-hero-num { position: absolute; top: 12px; left: 12px; width: 30px; height: 30px; border-radius: 50%; background: rgba(20,10,2,.72); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); border: 1.5px solid rgba(255,255,255,.15); color: #F0DCA8; font-size: 12px; font-weight: 500; display: flex; align-items: center; justify-content: center; }
-        .card-noimg-num { width: 32px; height: 32px; border-radius: 50%; background: #1C1208; color: #F0DCA8; font-size: 12px; font-weight: 500; display: flex; align-items: center; justify-content: center; margin: 16px 16px 0; }
-        .card-body { padding: 14px 16px 18px; }
-        .card-pills { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
-        .pill { background: #EEE0BA; color: #6A4E1A; border: 1px solid #D8C890; padding: 3px 8px; font-size: 9px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; border-radius: 4px; }
-        .pill--era { background: #F4ECD4; color: #8A6428; }
-        .card-title { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 700; color: #1C1208; line-height: 1.15; letter-spacing: -.01em; margin-bottom: 8px; }
-        .card-summary { font-size: 14px; line-height: 1.65; color: #5A4228; margin-bottom: 14px; }
-        .card-link { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 500; color: #C04830; text-decoration: none; letter-spacing: .02em; padding: 9px 16px; background: rgba(192,72,48,.08); border-radius: 8px; transition: background .15s; touch-action: manipulation; }
-        .card-link:active { background: rgba(192,72,48,.18); }
+        /* MAP */
+        .map-card { background: #FAF5E8; border: 1px solid #DCCAA4; border-radius: 11px; overflow: hidden; box-shadow: 0 2px 14px rgba(60,35,10,0.07); margin-top: 8px; margin-bottom: 24px; }
+        .map-card-header { padding: 12px 16px; border-bottom: 1px solid #DCCAA4; font-size: 10px; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: #9A7A48; display: flex; align-items: center; gap: 8px; }
+        .map-card-icon { color: #B8904E; font-size: 14px; }
+        .map-card-footer { padding: 14px 16px; border-top: 1px solid #DCCAA4; display: flex; gap: 10px; flex-wrap: wrap; }
+        .map-btn { flex: 1; min-width: 140px; padding: 10px 14px; border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 12.5px; font-weight: 500; letter-spacing: 0.04em; text-decoration: none; text-align: center; transition: background 0.18s, transform 0.14s; white-space: nowrap; }
+        .map-btn:hover { transform: translateY(-1px); }
+        .map-btn-google { background: #241A0C; color: #F0DDB8; }
+        .map-btn-google:hover { background: #3A2A14; }
+        .map-btn-apple { background: #EDE0BE; color: #241A0C; border: 1px solid #DCCAA4; }
+        .map-btn-apple:hover { background: #E0D0A8; }
 
-        /* ── LOAD MORE ── */
-        .load-more { width: 100%; padding: 16px; background: transparent; border: 1.5px dashed #C8B070; border-radius: 12px; color: #8A7040; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500; cursor: pointer; margin-bottom: 16px; transition: background .18s; touch-action: manipulation; -webkit-appearance: none; }
-        .load-more:active { background: rgba(200,176,112,.12); }
+        /* LOADING */
+        .loading-wrap { text-align: center; padding: 52px 0; }
+        .loading-text { font-family: 'Libre Baskerville', serif; font-style: italic; font-size: 16px; color: #9A7A48; margin-bottom: 18px; }
+        @keyframes pulse { 0%, 100% { opacity: 0.25; transform: scale(0.75); } 50% { opacity: 1; transform: scale(1.15); } }
+        .dots { display: flex; justify-content: center; gap: 8px; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; background: #B8904E; animation: pulse 1.3s ease-in-out infinite; }
 
-        /* ── MAP CARD ── */
-        .map-card {
-          background: #FAF4E4;
-          border-radius: 14px;
-          overflow: hidden;
-          margin-bottom: 16px;
-          box-shadow: 0 2px 12px rgba(30,16,4,.1);
-          outline: 1px solid rgba(180,150,80,.18);
-        }
-        .map-card-header {
-          padding: 13px 16px;
-          border-bottom: 1px solid #E8D8A8;
-          font-size: 9.5px; font-weight: 500;
-          letter-spacing: .2em; text-transform: uppercase;
-          color: #8A7040;
-          display: flex; align-items: center; gap: 8px;
-        }
-        .map-card-icon { color: #B8924A; font-size: 14px; }
-        .map-viewport {
-          height: 280px;
-          width: 100%;
-        }
-        /* Override Leaflet's default z-index so it doesn't escape the card */
-        .map-viewport .leaflet-container { height: 100%; width: 100%; }
-        .map-card-footer {
-          padding: 14px 16px;
-          border-top: 1px solid #E8D8A8;
-          display: flex; flex-direction: column; gap: 8px;
-        }
-        .maps-btn {
-          display: block; text-align: center;
-          padding: 13px 16px; border-radius: 9px;
-          font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500;
-          text-decoration: none; letter-spacing: .03em;
-          transition: opacity .15s; touch-action: manipulation;
-        }
-        .maps-btn:active { opacity: .8; }
-        .maps-btn--google { background: #C04830; color: #FFF4E0; }
-        .maps-btn--apple  { background: #2E2010; color: #D4B870; border: 1px solid #3A2A10; }
+        /* KO-FI */
+        .kofi-btn { position: fixed; right: 16px; bottom: 16px; background: #FAF0CC; border: 1.5px solid #D4BE90; width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; text-decoration: none; box-shadow: 0 4px 16px rgba(60,35,10,0.18); transition: transform 0.2s, box-shadow 0.2s; z-index: 9999; }
+        .kofi-btn:hover { transform: scale(1.1) rotate(-6deg); box-shadow: 0 8px 24px rgba(60,35,10,0.22); }
 
-        /* ── FOOTER ── */
-        .footer { padding: 32px 16px calc(32px + env(safe-area-inset-bottom, 0px)); text-align: center; }
-        .footer-rule { height: 1px; background: linear-gradient(90deg, transparent, #C4A860, transparent); margin-bottom: 20px; }
-        .footer-road { font-size: 11px; font-weight: 400; letter-spacing: .12em; text-transform: uppercase; color: #9A8050; margin-bottom: 14px; }
-        .footer-love { font-family: 'Lora', serif; font-style: italic; font-size: 15px; color: #7A6035; margin-bottom: 8px; line-height: 1.5; }
-        .footer-love strong { font-style: normal; font-weight: 700; color: #2A1C08; }
-        .footer-email { font-size: 13px; color: #C04830; text-decoration: none; border-bottom: 1px solid rgba(192,72,48,.3); padding-bottom: 1px; }
-        .footer-copy { margin-top: 10px; font-size: 11px; color: #A89060; letter-spacing: .05em; }
-        .footer-data { margin-top: 12px; font-size: 10px; letter-spacing: .08em; color: #A89060; }
+        /* FOOTER */
+        .footer { margin-top: 40px; text-align: center; padding-bottom: 20px; }
+        .footer-rule { height: 1px; background: linear-gradient(to right, transparent, #C4A870, transparent); margin-bottom: 18px; }
+        .footer-love { font-family: 'Libre Baskerville', serif; font-style: italic; font-size: 14px; color: #7A6040; margin-bottom: 8px; }
+        .footer-love strong { font-style: normal; font-weight: 700; color: #241A0C; }
+        .footer-email { font-family: 'DM Sans', sans-serif; font-size: 12px; color: #B84228; text-decoration: none; letter-spacing: 0.03em; border-bottom: 1px solid rgba(184,66,40,0.3); transition: color 0.15s, border-color 0.15s; }
+        .footer-email:hover { color: #962E18; border-color: #962E18; }
+        .footer-data { font-size: 10.5px; color: #A89060; letter-spacing: 0.09em; margin-top: 14px; }
 
-        /* ── WELCOME PANEL ── */
-        .welcome {
-          background: #FAF4E4;
-          border-radius: 14px;
-          padding: 24px 20px 22px;
-          margin-bottom: 16px;
-          outline: 1px solid rgba(180,150,80,.18);
-          box-shadow: 0 2px 12px rgba(30,16,4,.08);
-        }
-        .welcome-icon { font-size: 32px; text-align: center; margin-bottom: 12px; }
-        .welcome-heading {
-          font-family: 'Playfair Display', serif;
-          font-size: 20px; font-weight: 700;
-          color: #1C1208; text-align: center;
-          margin-bottom: 16px;
-        }
-        .welcome-steps {
-          list-style: none;
-          counter-reset: steps;
-          display: flex; flex-direction: column; gap: 12px;
-          margin-bottom: 24px;
-        }
-        .welcome-steps li {
-          counter-increment: steps;
-          display: flex; align-items: flex-start; gap: 12px;
-          font-size: 14px; line-height: 1.55; color: #5A4228;
-        }
-        .welcome-steps li::before {
-          content: counter(steps);
-          flex-shrink: 0;
-          width: 24px; height: 24px;
-          border-radius: 50%;
-          background: #1C1208;
-          color: #F0DCA8;
-          font-size: 11px; font-weight: 500;
-          display: flex; align-items: center; justify-content: center;
-          margin-top: 1px;
-        }
-        .welcome-steps li strong { color: #1C1208; font-weight: 600; }
-        .welcome-rule { height: 1px; background: linear-gradient(90deg, transparent, #C4A860, transparent); margin-bottom: 18px; }
-        .welcome-love { font-family: 'Lora', serif; font-style: italic; font-size: 14px; color: #7A6035; text-align: center; margin-bottom: 6px; }
-        .welcome-love strong { font-style: normal; font-weight: 700; color: #1C1208; }
-        .welcome-email { display: block; text-align: center; font-size: 13px; color: #C04830; text-decoration: none; border-bottom: 1px solid rgba(192,72,48,.3); padding-bottom: 1px; width: fit-content; margin: 0 auto 10px; }
-        .welcome-copy { text-align: center; font-size: 11px; color: #A89060; letter-spacing: .05em; }
-
-        /* ── KO-FI ── */
-        .kofi {
-          position: fixed; right: 16px;
-          bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-          height: 44px;
-          padding: 0 16px 0 12px;
-          border-radius: 22px;
-          background: #FAF0C8; border: 1.5px solid #D4B860;
-          display: flex; align-items: center; gap: 7px;
-          font-size: 20px; text-decoration: none;
-          box-shadow: 0 4px 20px rgba(20,10,2,.25);
-          z-index: 9999; transition: transform .2s;
-        }
-        .kofi-label {
-          font-family: 'DM Sans', sans-serif;
-          font-size: 12px; font-weight: 500;
-          color: #5A3C10; letter-spacing: .02em;
-          white-space: nowrap;
-        }
-        .kofi:active { transform: scale(.94); }
-
-        /* ── TABLET+ ── */
-        @media (min-width: 600px) {
-          .hero { padding: 56px 32px 0; }
-          .search-panel { padding: 24px 32px 32px; }
-          .content { padding: 28px 24px 0; }
-          .map-card-footer { flex-direction: row; }
-          .maps-btn { flex: 1; }
-          .card-hero { height: 260px; }
-          .map-viewport { height: 320px; }
-        }
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: #E8DCB8; }
+        ::-webkit-scrollbar-thumb { background: #C4A870; border-radius: 3px; }
       `}</style>
 
       <div className="page">
-        {/* ── DARK HERO ── */}
-        <div className="hero">
-          <p className="hero-eyebrow">Deutschland · Auf Entdeckungsreise</p>
-          <h1 className="hero-title">Road<em>tripper</em></h1>
-          <p className="hero-sub">History & heritage along your route</p>
+        <header className="header">
+          <div className="header-rule" style={{ marginBottom: 22 }} />
+          <div className="header-top">
+            <div className="eyebrow">Deutschland · Auf Entdeckungsreise</div>
+            <h1 className="headline">Roadtripper</h1>
+            <p className="subhead">Discover history & heritage along your route</p>
+          </div>
           <DrivingScene />
-        </div>
+          <div className="header-rule" style={{ marginTop: 0 }} />
+        </header>
 
-        {/* ── SEARCH ── */}
-        <div className="search-panel">
-          <p className="search-label">Plan your journey</p>
-          <div className="search-inputs">
-            <div className="search-input-wrap">
-              <span className="search-input-icon">◉</span>
-              <input className="search-input" placeholder="Start city"
-                value={start} onChange={e => setStart(e.target.value)}
-                onKeyDown={onKey} autoCorrect="off" autoCapitalize="words" />
+        <div className="search-card">
+          <div className="search-label">Plan your journey</div>
+          <div className="input-stack">
+            <div className="input-wrap">
+              <span className="input-icon">◉</span>
+              <input className="input-field" placeholder="Start city" value={start}
+                onChange={e => setStart(e.target.value)} onKeyDown={handleKey} />
             </div>
-            <div className="search-input-wrap">
-              <span className="search-input-icon">◎</span>
-              <input className="search-input" placeholder="Destination"
-                value={end} onChange={e => setEnd(e.target.value)}
-                onKeyDown={onKey} autoCorrect="off" autoCapitalize="words" />
+            <div className="input-divider">↓</div>
+            <div className="input-wrap">
+              <span className="input-icon">◎</span>
+              <input className="input-field" placeholder="Destination" value={end}
+                onChange={e => setEnd(e.target.value)} onKeyDown={handleKey} />
             </div>
           </div>
-          <button className="search-btn" onClick={findStops}>
-            {loading ? "Finding stops…" : "Explore Route"}
+          <button className="explore-btn" onClick={findStops}>
+            {loading ? "Exploring…" : "Explore Route"}
           </button>
         </div>
 
-        {/* ── RESULTS ── */}
-        <div className="content">
-
-          {/* Welcome panel — only shown before first search */}
-          {!hasSearched && !loading && (
-            <div className="welcome">
-              <div className="welcome-icon">🗺️</div>
-              <h2 className="welcome-heading">How it works</h2>
-              <ol className="welcome-steps">
-                <li>Enter a <strong>start city</strong> and a <strong>destination</strong> anywhere in Germany</li>
-                <li>Tap <strong>Explore Route</strong> to discover historic sites, monuments and places of interest within 25 km of your route</li>
-                <li>Tap <strong>More info</strong> on any stop to read its Wikipedia entry</li>
-                <li>Open the full journey in <strong>Google Maps</strong> or <strong>Apple Maps</strong> to navigate with all stops as waypoints</li>
-              </ol>
-              <div className="welcome-rule" />
-              <p className="welcome-love">A labour of love by <strong>Mike Stuchbery</strong></p>
-              <a href="mailto:michael.stuchbery@gmail.com" className="welcome-email">michael.stuchbery@gmail.com</a>
-              <p className="welcome-copy">© 2006 Mike Stuchbery</p>
-            </div>
-          )}
-
-          {loading && (
-            <div className="loading">
-              <p className="loading-text">Charting your route…</p>
-              <div className="loading-dots">
-                {[0,1,2].map(i => (
-                  <div key={i} className="loading-dot" style={{ animationDelay: `${i * 0.2}s` }} />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {!loading && shown.length > 0 && (
-            <>
-              <div className="results-header">
-                <div className="results-rule" />
-                <span className="results-count">{pois.length} stops found</span>
-                <div className="results-rule" />
-              </div>
-
-              {shown.map((p, i) => (
-                <Card key={i} poi={p} index={i} />
-              ))}
-
-              {visibleCount < pois.length && (
-                <button className="load-more" onClick={() => setVisible(v => v + 6)}>
-                  More stops along the way →
-                </button>
-              )}
-
-              {/* Visible map + native app links */}
-              <JourneyMap
-                routeCoords={routeCoords}
-                stops={shown}
-                startName={start}
-                endName={end}
-              />
-            </>
-          )}
-
-          {hasSearched && !loading && (
-            <footer className="footer">
-              <div className="footer-rule" />
-              <p className="footer-road">You've reached the end of this road</p>
-              <p className="footer-love">A labour of love by <strong>Mike Stuchbery</strong></p>
-              <a href="mailto:michael.stuchbery@gmail.com" className="footer-email">
-                michael.stuchbery@gmail.com
-              </a>
-              <p className="footer-copy">© 2006 Mike Stuchbery</p>
-              <p className="footer-data">
-                Routes · OSRM &nbsp;·&nbsp; Places · OpenStreetMap &nbsp;·&nbsp; Images · Wikipedia
-              </p>
-            </footer>
-          )}
-        </div>
-      </div>
-
-      <a href="https://ko-fi.com/mikestuchbery" target="_blank" rel="noopener noreferrer" className="kofi">
-        ☕ <span className="kofi-label">Buy a coffee</span>
-      </a>
-    </>
-  );
-}
--icon.png";
-import markerShadow from "leaflet/dist/images/marker-shadow.png";
-import { MapContainer, TileLayer, Polyline, Marker, Popup } from "react-leaflet";
-
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: markerIcon2x,
-  iconUrl: markerIcon,
-  shadowUrl: markerShadow,
-});
-
-/* ========= IMPORT POIS ========= */
-import baden from "./data/baden-wuerttemberg-pois.json";
-import bavaria from "./data/bavaria-pois.json";
-import berlin from "./data/berlin-pois.json";
-import brandenburg from "./data/brandenburg-pois.json";
-import bremen from "./data/bremen-pois.json";
-import hamburg from "./data/hamburg-pois.json";
-import hesse from "./data/hesse-pois.json";
-import lowerSaxony from "./data/lower-saxony-pois.json";
-import meckpom from "./data/mecklenburg-vorpommern-pois.json";
-import nrw from "./data/north-rhine-westphalia-pois.json";
-import rlp from "./data/rhineland-palatinate-pois.json";
-import saarland from "./data/saarland-pois.json";
-import saxony from "./data/saxony-pois.json";
-import saxonyAnhalt from "./data/saxony-anhalt-pois.json";
-import sh from "./data/schleswig-holstein-pois.json";
-import thuringia from "./data/thuringia-pois.json";
-
-function asArray(x) {
-  if (!x) return [];
-  if (Array.isArray(x)) return x;
-  if (Array.isArray(x.pois)) return x.pois;
-  if (Array.isArray(x.data)) return x.data;
-  if (x.name) return [x];
-  return [];
-}
-
-const ALL_POIS = [
-  ...asArray(baden), ...asArray(bavaria), ...asArray(berlin),
-  ...asArray(brandenburg), ...asArray(bremen), ...asArray(hamburg),
-  ...asArray(hesse), ...asArray(lowerSaxony), ...asArray(meckpom),
-  ...asArray(nrw), ...asArray(rlp), ...asArray(saarland),
-  ...asArray(saxony), ...asArray(saxonyAnhalt), ...asArray(sh),
-  ...asArray(thuringia),
-];
-
-/* ========= GEO ========= */
-function haversineKm(a, b) {
-  const R = 6371;
-  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
-  const dLon = ((b.lon - a.lon) * Math.PI) / 180;
-  const lat1 = (a.lat * Math.PI) / 180;
-  const lat2 = (b.lat * Math.PI) / 180;
-  const x = Math.sin(dLat / 2) ** 2 + Math.sin(dLon / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
-  return 2 * R * Math.asin(Math.sqrt(x));
-}
-
-function minDistanceToRoute(poi, coords) {
-  let min = Infinity, idx = 0;
-  coords.forEach((c, i) => {
-    const d = haversineKm({ lat: poi.lat, lon: poi.lon }, { lat: c[1], lon: c[0] });
-    if (d < min) { min = d; idx = i; }
-  });
-  return { distance: min, index: idx };
-}
-
-/* ========= WIKI IMAGE ========= */
-async function fetchWikiImage(title) {
-  try {
-    const s = await fetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(title)}&format=json&origin=*`);
-    const sj = await s.json();
-    const page = sj.query.search[0];
-    if (!page) return null;
-    const p = await fetch(`https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(page.title)}&prop=pageimages&pithumbsize=900&format=json&origin=*`);
-    const pj = await p.json();
-    const pg = Object.values(pj.query.pages)[0];
-    return pg.thumbnail?.source || null;
-  } catch { return null; }
-}
-
-/* ========= DRIVING SCENE ========= */
-function DrivingScene() {
-  return (
-    <div className="scene" aria-hidden="true">
-      <div className="scene-sky">
-        <div className="scene-sun" />
-        <div className="scene-cloud scene-cloud--a" />
-        <div className="scene-cloud scene-cloud--b" />
-        <div className="scene-cloud scene-cloud--c" />
-      </div>
-      <div className="scene-hill scene-hill--far" />
-      <div className="scene-hill scene-hill--near" />
-      <div className="scene-treeline">
-        {[...Array(10)].map((_, i) => (
-          <div key={i} className="scene-tree" style={{ animationDelay: `${(i * -0.9).toFixed(1)}s` }}>
-            <div className="scene-trunk" />
-            <div className="scene-canopy" />
-          </div>
-        ))}
-      </div>
-      <div className="scene-road">
-        {[...Array(7)].map((_, i) => (
-          <div key={i} className="scene-dash" style={{ animationDelay: `${(i * -0.45).toFixed(2)}s` }} />
-        ))}
-      </div>
-      <div className="scene-car">
-        <div className="scene-car-body">
-          <div className="scene-car-roof" />
-          <div className="scene-win scene-win--rear" />
-          <div className="scene-win scene-win--front" />
-          <div className="scene-headlight" />
-        </div>
-        <div className="scene-wheel scene-wheel--rear" />
-        <div className="scene-wheel scene-wheel--front" />
-        <div className="scene-puff scene-puff--a" />
-        <div className="scene-puff scene-puff--b" />
-      </div>
-    </div>
-  );
-}
-
-/* ========= CARD ========= */
-function Card({ poi, index }) {
-  const name    = poi.name ?? poi.title ?? "Site";
-  const era     = poi.era ?? poi.century ?? "";
-  const type    = poi.type ?? poi.category ?? "";
-  const summary = poi.summary ?? poi.description ?? "";
-  const [img, setImg]       = useState(null);
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => { fetchWikiImage(name).then(setImg); }, [name]);
-
-  const wikiUrl = `https://en.wikipedia.org/wiki/${encodeURIComponent(name)}`;
-
-  return (
-    <div className="card" style={{ animationDelay: `${index * 0.06}s` }}>
-      {img ? (
-        <div className="card-hero">
-          <img
-            src={img} alt={name}
-            className={`card-hero-img${loaded ? " card-hero-img--in" : ""}`}
-            onLoad={() => setLoaded(true)}
-          />
-          <div className="card-hero-fade" />
-          <div className="card-hero-num">{index + 1}</div>
-        </div>
-      ) : (
-        <div className="card-noimg-num">{index + 1}</div>
-      )}
-      <div className="card-body">
-        <div className="card-pills">
-          {type && <span className="pill">{type}</span>}
-          {era  && <span className="pill pill--era">{era}</span>}
-        </div>
-        <h2 className="card-title">{name}</h2>
-        {summary && <p className="card-summary">{summary}</p>}
-        <a href={wikiUrl} target="_blank" rel="noreferrer" className="card-link">
-          More info →
-        </a>
-      </div>
-    </div>
-  );
-}
-
-/* ========= JOURNEY MAP ========= */
-function JourneyMap({ routeCoords, stops, startName, endName }) {
-  if (!routeCoords?.length || !stops?.length) return null;
-
-  // Centre on the midpoint of the route
-  const mid = routeCoords[Math.floor(routeCoords.length / 2)];
-
-  // Google Maps: start / waypoints / end
-  // Waypoints are the stops in between (all except start/end cities which are separate)
-  const waypointStr = stops
-    .map(p => `${p.lat},${p.lon}`)
-    .join("|");
-  const googleUrl =
-    `https://www.google.com/maps/dir/?api=1` +
-    `&origin=${encodeURIComponent(startName)}` +
-    `&destination=${encodeURIComponent(endName)}` +
-    `&waypoints=${encodeURIComponent(waypointStr)}` +
-    `&travelmode=driving`;
-
-  // Apple Maps: chain daddr with `+to:` for multi-stop
-  // Format: saddr -> first stop -> ... -> endName
-  const allPoints = [startName, ...stops.map(p => `${p.lat},${p.lon}`), endName];
-  const appleUrl =
-    `https://maps.apple.com/?saddr=${encodeURIComponent(allPoints[0])}` +
-    allPoints.slice(1).map(pt => `&daddr=${encodeURIComponent(pt)}`).join("") +
-    `&dirflg=d`;
-
-  return (
-    <div className="map-card">
-      <div className="map-card-header">
-        <span className="map-card-icon">◎</span>
-        <span>Journey map</span>
-      </div>
-
-      {/* Leaflet map — full bleed */}
-      <div className="map-viewport">
-        <MapContainer
-          style={{ height: "100%", width: "100%" }}
-          center={[mid[1], mid[0]]}
-          zoom={6}
-          scrollWheelZoom={false}
-          zoomControl={true}
-        >
-          <TileLayer
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            attribution=""
-          />
-          {/* Route polyline */}
-          <Polyline
-            positions={routeCoords.map(c => [c[1], c[0]])}
-            pathOptions={{ color: "#C04830", weight: 3, opacity: 0.85, dashArray: "8 5" }}
-          />
-          {/* Stop markers with popup name */}
-          {stops.map((p, i) => (
-            <Marker key={i} position={[p.lat, p.lon]}>
-              <Popup>{p.name ?? p.title ?? "Stop"}</Popup>
-            </Marker>
-          ))}
-        </MapContainer>
-      </div>
-
-      {/* Map action buttons */}
-      <div className="map-card-footer">
-        <a href={googleUrl} target="_blank" rel="noreferrer" className="maps-btn maps-btn--google">
-          Open in Google Maps →
-        </a>
-        <a href={appleUrl} target="_blank" rel="noreferrer" className="maps-btn maps-btn--apple">
-          Open in Apple Maps →
-        </a>
-      </div>
-    </div>
-  );
-}
-
-/* ========= APP ========= */
-export default function App() {
-  const [start, setStart]          = useState("");
-  const [end, setEnd]              = useState("");
-  const [pois, setPois]            = useState([]);
-  const [routeCoords, setCoords]   = useState([]);
-  const [visibleCount, setVisible] = useState(8);
-  const [loading, setLoading]      = useState(false);
-  const [hasSearched, setSearched] = useState(false);
-
-  async function geocode(place) {
-    const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(place)}`);
-    const j = await r.json();
-    return { lat: +j[0].lat, lon: +j[0].lon };
-  }
-
-  async function fetchRoute(a, b) {
-    const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${a.lon},${a.lat};${b.lon},${b.lat}?overview=full&geometries=geojson`);
-    const j = await r.json();
-    return j.routes[0].geometry.coordinates; // [lon, lat] pairs
-  }
-
-  async function findStops() {
-    if (!start || !end) return;
-    setLoading(true); setPois([]); setCoords([]); setSearched(true);
-    try {
-      const A = await geocode(start);
-      const B = await geocode(end);
-      const coords = await fetchRoute(A, B);
-      setCoords(coords);
-
-      const candidates = [];
-      ALL_POIS.forEach(p => {
-        const lat = p.lat ?? p.latitude;
-        const lon = p.lon ?? p.longitude;
-        if (!lat || !lon) return;
-        const { distance, index } = minDistanceToRoute({ lat, lon }, coords);
-        if (distance <= 25) candidates.push({ ...p, lat, lon, routeIndex: index });
-      });
-
-      candidates.sort((a, b) => a.routeIndex - b.routeIndex);
-      const routeKm = haversineKm(A, B);
-      setPois(candidates);
-      setVisible(routeKm < 100 ? 4 : 8);
-    } catch (e) { alert(e.message); }
-    setLoading(false);
-  }
-
-  const onKey = e => { if (e.key === "Enter") findStops(); };
-  const shown = pois.slice(0, visibleCount);
-
-  return (
-    <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Lora:ital,wght@0,400;1,400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap');
-
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        html { font-size: 16px; -webkit-tap-highlight-color: transparent; }
-        body {
-          font-family: 'DM Sans', sans-serif;
-          background: #E8DEC6;
-          min-height: 100dvh;
-          overscroll-behavior: none;
-        }
-        .page {
-          min-height: 100dvh;
-          padding-bottom: env(safe-area-inset-bottom, 24px);
-        }
-
-        /* ── HERO ── */
-        .hero {
-          background: #1C1208;
-          padding: 52px 20px 0;
-          position: relative;
-          overflow: hidden;
-        }
-        .hero::before {
-          content: '';
-          position: absolute; inset: 0;
-          background:
-            radial-gradient(ellipse at 30% 0%, rgba(184,130,50,.22) 0%, transparent 60%),
-            radial-gradient(ellipse at 80% 80%, rgba(120,60,20,.18) 0%, transparent 50%);
-          pointer-events: none;
-        }
-        .hero-eyebrow {
-          font-size: 10px; font-weight: 500; letter-spacing: .26em;
-          text-transform: uppercase; color: #B8924A;
-          text-align: center; margin-bottom: 10px; position: relative;
-        }
-        .hero-title {
-          font-family: 'Playfair Display', serif;
-          font-size: clamp(48px, 13vw, 72px);
-          font-weight: 700; color: #F5EDDA;
-          text-align: center; letter-spacing: -.02em; line-height: .95;
-          position: relative;
-        }
-        .hero-title em { font-style: italic; color: #D4A050; }
-        .hero-sub {
-          font-family: 'Lora', serif; font-style: italic;
-          font-size: 14px; color: #9A8060;
-          text-align: center; margin-top: 10px; position: relative;
-        }
-
-        /* ── DRIVING SCENE ── */
-        .scene {
-          position: relative; height: 100px;
-          overflow: hidden; margin-top: 20px;
-        }
-        .scene-sky {
-          position: absolute; inset: 0;
-          background: linear-gradient(180deg, #7AAECC 0%, #B8D8EC 50%, #D4A84A 100%);
-        }
-        .scene-sun {
-          position: absolute; top: 10px; right: 48px;
-          width: 20px; height: 20px; border-radius: 50%;
-          background: radial-gradient(circle, #FFE860 20%, #FFB020 100%);
-          box-shadow: 0 0 18px 6px rgba(255,190,40,.5);
-        }
-        .scene-cloud {
-          position: absolute; background: rgba(255,255,255,.82);
-          border-radius: 40px; animation: cloud linear infinite;
-        }
-        .scene-cloud::before, .scene-cloud::after {
-          content: ''; position: absolute;
-          background: rgba(255,255,255,.82); border-radius: 50%;
-        }
-        .scene-cloud--a { width: 58px; height: 14px; top: 12px; animation-duration: 15s; animation-delay: -3s; }
-        .scene-cloud--a::before { width: 26px; height: 20px; top: -11px; left: 9px; }
-        .scene-cloud--a::after  { width: 18px; height: 16px; top: -7px;  left: 26px; }
-        .scene-cloud--b { width: 44px; height: 12px; top: 20px; animation-duration: 21s; animation-delay: -9s; }
-        .scene-cloud--b::before { width: 20px; height: 17px; top: -9px; left: 7px; }
-        .scene-cloud--b::after  { width: 15px; height: 13px; top: -6px; left: 20px; }
-        .scene-cloud--c { width: 50px; height: 13px; top: 8px; animation-duration: 18s; animation-delay: -13s; }
-        .scene-cloud--c::before { width: 22px; height: 18px; top: -10px; left: 11px; }
-        .scene-cloud--c::after  { width: 16px; height: 14px; top: -6px;  left: 26px; }
-        @keyframes cloud { from { transform: translateX(120vw); } to { transform: translateX(-200px); } }
-        .scene-hill { position: absolute; border-radius: 50%; bottom: 28px; }
-        .scene-hill--far  { width: 55vw; height: 70px; background: #6A9A58; animation: hill-far 11s linear infinite; }
-        .scene-hill--near { width: 42vw; height: 52px; background: #507A40; animation: hill-near 7.5s linear infinite; bottom: 27px; }
-        @keyframes hill-far  { from { left: 110%; } to { left: -60%; } }
-        @keyframes hill-near { from { left: 110%; } to { left: -50%; } }
-        .scene-treeline { position: absolute; bottom: 26px; left: 0; right: 0; height: 44px; }
-        .scene-tree { position: absolute; bottom: 0; animation: tree 3.2s linear infinite; }
-        @keyframes tree { from { left: 110%; } to { left: -30px; } }
-        .scene-trunk  { width: 5px; height: 12px; background: #5A3C18; margin: 0 auto; border-radius: 2px; }
-        .scene-canopy { width: 0; height: 0; border-left: 11px solid transparent; border-right: 11px solid transparent; border-bottom: 24px solid #2A6020; position: absolute; top: -17px; left: -8px; }
-        .scene-canopy::after { content: ''; position: absolute; width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 18px solid #347028; top: -7px; left: -8px; }
-        .scene-road { position: absolute; bottom: 0; left: 0; right: 0; height: 28px; background: linear-gradient(180deg, #7A7A7A 0%, #686868 100%); border-top: 2px solid #929292; display: flex; align-items: center; overflow: hidden; }
-        .scene-dash { flex-shrink: 0; width: 36px; height: 3px; background: #F0D840; border-radius: 2px; margin-right: 28px; animation: dash .65s linear infinite; }
-        @keyframes dash { from { transform: translateX(64px); } to { transform: translateX(-64px); } }
-        .scene-car { position: absolute; bottom: 8px; left: 26%; animation: bob .32s ease-in-out infinite alternate; }
-        @keyframes bob { from { transform: translateY(0); } to { transform: translateY(-2px); } }
-        .scene-car-body { position: relative; width: 64px; height: 20px; background: #C04830; border-radius: 3px 4px 2px 2px; }
-        .scene-car-roof { position: absolute; top: -13px; left: 10px; width: 38px; height: 15px; background: #A03820; border-radius: 5px 5px 0 0; }
-        .scene-win { position: absolute; top: -10px; height: 9px; background: rgba(160,210,240,.88); border-radius: 2px 2px 0 0; }
-        .scene-win--front { width: 14px; left: 34px; }
-        .scene-win--rear  { width: 13px; left: 16px; }
-        .scene-headlight { position: absolute; right: 2px; top: 6px; width: 4px; height: 5px; background: #FFE880; border-radius: 1px; box-shadow: 0 0 6px 2px rgba(255,230,80,.6); }
-        .scene-wheel { position: absolute; bottom: -6px; width: 13px; height: 13px; border-radius: 50%; background: #1A1A1A; border: 2px solid #444; animation: spin .38s linear infinite; }
-        .scene-wheel--front { right: 7px; } .scene-wheel--rear { left: 7px; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .scene-puff { position: absolute; border-radius: 50%; background: rgba(210,210,210,.5); animation: puff .65s ease-out infinite; }
-        .scene-puff--a { width: 9px; height: 9px; bottom: 4px; left: -9px; }
-        .scene-puff--b { width: 6px; height: 6px; bottom: 6px; left: -16px; animation-delay: .32s; }
-        @keyframes puff { 0% { opacity: .7; transform: scale(.5) translateX(0); } 100% { opacity: 0; transform: scale(1.8) translateX(-12px); } }
-
-        /* ── SEARCH ── */
-        .search-panel {
-          background: #1C1208;
-          padding: 20px 20px 28px;
-        }
-        .search-label { font-size: 9.5px; font-weight: 500; letter-spacing: .22em; text-transform: uppercase; color: #7A6035; margin-bottom: 12px; }
-        .search-inputs { display: flex; flex-direction: column; margin-bottom: 14px; border-radius: 10px; overflow: hidden; border: 1.5px solid #3A2A10; }
-        .search-input-wrap { position: relative; display: flex; align-items: center; background: #261C0C; }
-        .search-input-wrap + .search-input-wrap { border-top: 1px solid #3A2A10; }
-        .search-input-icon { padding: 0 4px 0 16px; color: #B8924A; font-size: 12px; flex-shrink: 0; }
-        .search-input { flex: 1; padding: 15px 14px 15px 6px; background: transparent; border: none; font-family: 'DM Sans', sans-serif; font-size: 16px; color: #F0E4C8; outline: none; }
-        .search-input::placeholder { color: #5A4828; font-style: italic; }
-        .search-btn { width: 100%; padding: 16px; border: none; border-radius: 10px; background: #C04830; color: #FFF4E0; font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 500; letter-spacing: .06em; cursor: pointer; transition: background .18s, transform .12s; -webkit-appearance: none; touch-action: manipulation; }
-        .search-btn:active { background: #A03820; transform: scale(.98); }
-
-        /* ── CONTENT ── */
-        .content { padding: 24px 16px 0; }
-
-        /* ── LOADING ── */
-        .loading { display: flex; flex-direction: column; align-items: center; padding: 56px 0; gap: 16px; }
-        .loading-text { font-family: 'Lora', serif; font-style: italic; font-size: 16px; color: #8A7040; }
-        .loading-dots { display: flex; gap: 7px; }
-        .loading-dot { width: 9px; height: 9px; border-radius: 50%; background: #B8924A; animation: dotpulse 1.2s ease-in-out infinite; }
-        @keyframes dotpulse { 0%, 100% { opacity: .2; transform: scale(.7); } 50% { opacity: 1; transform: scale(1.2); } }
-
-        /* ── RESULTS HEADER ── */
-        .results-header { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
-        .results-rule { flex: 1; height: 1px; background: #C8B888; }
-        .results-count { font-size: 9.5px; font-weight: 500; letter-spacing: .2em; text-transform: uppercase; color: #8A7040; white-space: nowrap; }
-
-        /* ── CARD ── */
-        @keyframes cardIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        .card { background: #FAF4E4; border-radius: 14px; overflow: hidden; margin-bottom: 16px; box-shadow: 0 2px 12px rgba(30,16,4,.1), 0 1px 3px rgba(30,16,4,.07); animation: cardIn .42s ease both; outline: 1px solid rgba(180,150,80,.18); }
-        .card-hero { position: relative; height: 220px; overflow: hidden; }
-        .card-hero-img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0; transition: opacity .5s ease, transform .4s ease; transform: scale(1.04); }
-        .card-hero-img--in { opacity: 1; transform: scale(1); }
-        .card-hero-fade { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 40%, rgba(20,10,2,.55) 100%); }
-        .card-hero-num { position: absolute; top: 12px; left: 12px; width: 30px; height: 30px; border-radius: 50%; background: rgba(20,10,2,.72); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); border: 1.5px solid rgba(255,255,255,.15); color: #F0DCA8; font-size: 12px; font-weight: 500; display: flex; align-items: center; justify-content: center; }
-        .card-noimg-num { width: 32px; height: 32px; border-radius: 50%; background: #1C1208; color: #F0DCA8; font-size: 12px; font-weight: 500; display: flex; align-items: center; justify-content: center; margin: 16px 16px 0; }
-        .card-body { padding: 14px 16px 18px; }
-        .card-pills { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
-        .pill { background: #EEE0BA; color: #6A4E1A; border: 1px solid #D8C890; padding: 3px 8px; font-size: 9px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; border-radius: 4px; }
-        .pill--era { background: #F4ECD4; color: #8A6428; }
-        .card-title { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 700; color: #1C1208; line-height: 1.15; letter-spacing: -.01em; margin-bottom: 8px; }
-        .card-summary { font-size: 14px; line-height: 1.65; color: #5A4228; margin-bottom: 14px; }
-        .card-link { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 500; color: #C04830; text-decoration: none; letter-spacing: .02em; padding: 9px 16px; background: rgba(192,72,48,.08); border-radius: 8px; transition: background .15s; touch-action: manipulation; }
-        .card-link:active { background: rgba(192,72,48,.18); }
-
-        /* ── LOAD MORE ── */
-        .load-more { width: 100%; padding: 16px; background: transparent; border: 1.5px dashed #C8B070; border-radius: 12px; color: #8A7040; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500; cursor: pointer; margin-bottom: 16px; transition: background .18s; touch-action: manipulation; -webkit-appearance: none; }
-        .load-more:active { background: rgba(200,176,112,.12); }
-
-        /* ── MAP CARD ── */
-        .map-card {
-          background: #FAF4E4;
-          border-radius: 14px;
-          overflow: hidden;
-          margin-bottom: 16px;
-          box-shadow: 0 2px 12px rgba(30,16,4,.1);
-          outline: 1px solid rgba(180,150,80,.18);
-        }
-        .map-card-header {
-          padding: 13px 16px;
-          border-bottom: 1px solid #E8D8A8;
-          font-size: 9.5px; font-weight: 500;
-          letter-spacing: .2em; text-transform: uppercase;
-          color: #8A7040;
-          display: flex; align-items: center; gap: 8px;
-        }
-        .map-card-icon { color: #B8924A; font-size: 14px; }
-        .map-viewport {
-          height: 280px;
-          width: 100%;
-        }
-        /* Override Leaflet's default z-index so it doesn't escape the card */
-        .map-viewport .leaflet-container { height: 100%; width: 100%; }
-        .map-card-footer {
-          padding: 14px 16px;
-          border-top: 1px solid #E8D8A8;
-          display: flex; flex-direction: column; gap: 8px;
-        }
-        .maps-btn {
-          display: block; text-align: center;
-          padding: 13px 16px; border-radius: 9px;
-          font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500;
-          text-decoration: none; letter-spacing: .03em;
-          transition: opacity .15s; touch-action: manipulation;
-        }
-        .maps-btn:active { opacity: .8; }
-        .maps-btn--google { background: #C04830; color: #FFF4E0; }
-        .maps-btn--apple  { background: #2E2010; color: #D4B870; border: 1px solid #3A2A10; }
-
-        /* ── FOOTER ── */
-        .footer { padding: 32px 16px calc(32px + env(safe-area-inset-bottom, 0px)); text-align: center; }
-        .footer-rule { height: 1px; background: linear-gradient(90deg, transparent, #C4A860, transparent); margin-bottom: 20px; }
-        .footer-road { font-size: 11px; font-weight: 400; letter-spacing: .12em; text-transform: uppercase; color: #9A8050; margin-bottom: 14px; }
-        .footer-love { font-family: 'Lora', serif; font-style: italic; font-size: 15px; color: #7A6035; margin-bottom: 8px; line-height: 1.5; }
-        .footer-love strong { font-style: normal; font-weight: 700; color: #2A1C08; }
-        .footer-email { font-size: 13px; color: #C04830; text-decoration: none; border-bottom: 1px solid rgba(192,72,48,.3); padding-bottom: 1px; }
-        .footer-copy { margin-top: 10px; font-size: 11px; color: #A89060; letter-spacing: .05em; }
-        .footer-data { margin-top: 12px; font-size: 10px; letter-spacing: .08em; color: #A89060; }
-
-        /* ── WELCOME PANEL ── */
-        .welcome {
-          background: #FAF4E4;
-          border-radius: 14px;
-          padding: 24px 20px 22px;
-          margin-bottom: 16px;
-          outline: 1px solid rgba(180,150,80,.18);
-          box-shadow: 0 2px 12px rgba(30,16,4,.08);
-        }
-        .welcome-icon { font-size: 32px; text-align: center; margin-bottom: 12px; }
-        .welcome-heading {
-          font-family: 'Playfair Display', serif;
-          font-size: 20px; font-weight: 700;
-          color: #1C1208; text-align: center;
-          margin-bottom: 16px;
-        }
-        .welcome-steps {
-          list-style: none;
-          counter-reset: steps;
-          display: flex; flex-direction: column; gap: 12px;
-          margin-bottom: 24px;
-        }
-        .welcome-steps li {
-          counter-increment: steps;
-          display: flex; align-items: flex-start; gap: 12px;
-          font-size: 14px; line-height: 1.55; color: #5A4228;
-        }
-        .welcome-steps li::before {
-          content: counter(steps);
-          flex-shrink: 0;
-          width: 24px; height: 24px;
-          border-radius: 50%;
-          background: #1C1208;
-          color: #F0DCA8;
-          font-size: 11px; font-weight: 500;
-          display: flex; align-items: center; justify-content: center;
-          margin-top: 1px;
-        }
-        .welcome-steps li strong { color: #1C1208; font-weight: 600; }
-        .welcome-rule { height: 1px; background: linear-gradient(90deg, transparent, #C4A860, transparent); margin-bottom: 18px; }
-        .welcome-love { font-family: 'Lora', serif; font-style: italic; font-size: 14px; color: #7A6035; text-align: center; margin-bottom: 6px; }
-        .welcome-love strong { font-style: normal; font-weight: 700; color: #1C1208; }
-        .welcome-email { display: block; text-align: center; font-size: 13px; color: #C04830; text-decoration: none; border-bottom: 1px solid rgba(192,72,48,.3); padding-bottom: 1px; width: fit-content; margin: 0 auto 10px; }
-        .welcome-copy { text-align: center; font-size: 11px; color: #A89060; letter-spacing: .05em; }
-
-        /* ── KO-FI ── */
-        .kofi {
-          position: fixed; right: 16px;
-          bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-          height: 44px;
-          padding: 0 16px 0 12px;
-          border-radius: 22px;
-          background: #FAF0C8; border: 1.5px solid #D4B860;
-          display: flex; align-items: center; gap: 7px;
-          font-size: 20px; text-decoration: none;
-          box-shadow: 0 4px 20px rgba(20,10,2,.25);
-          z-index: 9999; transition: transform .2s;
-        }
-        .kofi-label {
-          font-family: 'DM Sans', sans-serif;
-          font-size: 12px; font-weight: 500;
-          color: #5A3C10; letter-spacing: .02em;
-          white-space: nowrap;
-        }
-        .kofi:active { transform: scale(.94); }
-
-        /* ── TABLET+ ── */
-        @media (min-width: 600px) {
-          .hero { padding: 56px 32px 0; }
-          .search-panel { padding: 24px 32px 32px; }
-          .content { padding: 28px 24px 0; }
-          .map-card-footer { flex-direction: row; }
-          .maps-btn { flex: 1; }
-          .card-hero { height: 260px; }
-          .map-viewport { height: 320px; }
-        }
-      `}</style>
-
-      <div className="page">
-        {/* ── DARK HERO ── */}
-        <div className="hero">
-          <p className="hero-eyebrow">Deutschland · Auf Entdeckungsreise</p>
-          <h1 className="hero-title">Road<em>tripper</em></h1>
-          <p className="hero-sub">History & heritage along your route</p>
-          <DrivingScene />
-        </div>
-
-        {/* ── SEARCH ── */}
-        <div className="search-panel">
-          <p className="search-label">Plan your journey</p>
-          <div className="search-inputs">
-            <div className="search-input-wrap">
-              <span className="search-input-icon">◉</span>
-              <input className="search-input" placeholder="Start city"
-                value={start} onChange={e => setStart(e.target.value)}
-                onKeyDown={onKey} autoCorrect="off" autoCapitalize="words" />
-            </div>
-            <div className="search-input-wrap">
-              <span className="search-input-icon">◎</span>
-              <input className="search-input" placeholder="Destination"
-                value={end} onChange={e => setEnd(e.target.value)}
-                onKeyDown={onKey} autoCorrect="off" autoCapitalize="words" />
+        {loading && (
+          <div className="loading-wrap">
+            <div className="loading-text">Charting your route…</div>
+            <div className="dots">
+              {[0,1,2].map(i => <div key={i} className="dot" style={{ animationDelay: `${i * 0.2}s` }} />)}
             </div>
           </div>
-          <button className="search-btn" onClick={findStops}>
-            {loading ? "Finding stops…" : "Explore Route"}
-          </button>
-        </div>
+        )}
 
-        {/* ── RESULTS ── */}
-        <div className="content">
-
-          {/* Welcome panel — only shown before first search */}
-          {!hasSearched && !loading && (
-            <div className="welcome">
-              <div className="welcome-icon">🗺️</div>
-              <h2 className="welcome-heading">How it works</h2>
-              <ol className="welcome-steps">
-                <li>Enter a <strong>start city</strong> and a <strong>destination</strong> anywhere in Germany</li>
-                <li>Tap <strong>Explore Route</strong> to discover historic sites, monuments and places of interest within 25 km of your route</li>
-                <li>Tap <strong>More info</strong> on any stop to read its Wikipedia entry</li>
-                <li>Open the full journey in <strong>Google Maps</strong> or <strong>Apple Maps</strong> to navigate with all stops as waypoints</li>
-              </ol>
-              <div className="welcome-rule" />
-              <p className="welcome-love">A labour of love by <strong>Mike Stuchbery</strong></p>
-              <a href="mailto:michael.stuchbery@gmail.com" className="welcome-email">michael.stuchbery@gmail.com</a>
-              <p className="welcome-copy">© 2006 Mike Stuchbery</p>
+        {!loading && shown.length > 0 && (
+          <>
+            <div className="results-heading">
+              <div className="results-rule" />
+              <div className="results-label">{pois.length} stops along your route</div>
+              <div className="results-rule" />
             </div>
-          )}
 
-          {loading && (
-            <div className="loading">
-              <p className="loading-text">Charting your route…</p>
-              <div className="loading-dots">
-                {[0,1,2].map(i => (
-                  <div key={i} className="loading-dot" style={{ animationDelay: `${i * 0.2}s` }} />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {!loading && shown.length > 0 && (
-            <>
-              <div className="results-header">
-                <div className="results-rule" />
-                <span className="results-count">{pois.length} stops found</span>
-                <div className="results-rule" />
-              </div>
-
-              {shown.map((p, i) => (
-                <Card key={i} poi={p} index={i} />
-              ))}
-
-              {visibleCount < pois.length && (
-                <button className="load-more" onClick={() => setVisible(v => v + 6)}>
-                  More stops along the way →
-                </button>
-              )}
-
-              {/* Visible map + native app links */}
-              <JourneyMap
-                routeCoords={routeCoords}
-                stops={shown}
-                startName={start}
-                endName={end}
+            {shown.map((p, i) => (
+              <Card key={i} index={i}
+                name={p.name ?? p.title ?? "Site"}
+                era={p.era ?? p.century ?? ""}
+                type={p.type ?? p.category ?? ""}
+                summary={p.summary ?? p.description ?? ""}
               />
-            </>
-          )}
+            ))}
 
-          {hasSearched && !loading && (
-            <footer className="footer">
-              <div className="footer-rule" />
-              <p className="footer-road">You've reached the end of this road</p>
-              <p className="footer-love">A labour of love by <strong>Mike Stuchbery</strong></p>
-              <a href="mailto:michael.stuchbery@gmail.com" className="footer-email">
-                michael.stuchbery@gmail.com
-              </a>
-              <p className="footer-copy">© 2006 Mike Stuchbery</p>
-              <p className="footer-data">
-                Routes · OSRM &nbsp;·&nbsp; Places · OpenStreetMap &nbsp;·&nbsp; Images · Wikipedia
-              </p>
-            </footer>
-          )}
-        </div>
+            {visibleCount < pois.length && (
+              <button className="load-more" onClick={() => setVisibleCount(v => v + 6)}>
+                Load more stops along route →
+              </button>
+            )}
+
+            <JourneyMap coords={coords} pois={shown} start={start} end={end} />
+          </>
+        )}
+
+        <footer className="footer">
+          <div className="footer-rule" />
+          <p className="footer-love">A labour of love by <strong>Mike Stuchbery</strong></p>
+          <a href="mailto:michael.stuchbery@gmail.com" className="footer-email">
+            michael.stuchbery@gmail.com
+          </a>
+          <p className="footer-data">Routes via OSRM · Places via OpenStreetMap · Images via Wikipedia</p>
+        </footer>
       </div>
 
-      <a href="https://ko-fi.com/mikestuchbery" target="_blank" rel="noopener noreferrer" className="kofi">
-        ☕ <span className="kofi-label">Buy a coffee</span>
-      </a>
+      <KofiButton />
     </>
   );
 }
