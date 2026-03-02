@@ -21,8 +21,18 @@ import thuringia from "./data/thuringia-pois.json";
 /* ===== SAFE MERGE ALL POIS ===== */
 function asArray(x) {
   if (!x) return [];
+
+  // already an array
   if (Array.isArray(x)) return x;
+
+  // common wrapper keys
   if (Array.isArray(x.pois)) return x.pois;
+  if (Array.isArray(x.data)) return x.data;
+  if (Array.isArray(x.features)) return x.features;
+
+  // single POI object
+  if (x.name && (x.lat || x.latitude)) return [x];
+
   return [];
 }
 
