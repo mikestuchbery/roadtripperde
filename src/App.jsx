@@ -143,10 +143,13 @@ export default function App() {
       const B = await geocode(end);
       const coords = await route(A, B);
 
-      const near = ALL_POIS.filter(
-        (p) => p.lat && p.lon && minDistanceToRoute(p, coords) <= 25
-      );
-
+      const near = ALL_POIS.filter((p) => {
+  const lat = p.lat ?? p.latitude;
+  const lon = p.lon ?? p.longitude;
+  if (!lat || !lon) return false;
+  return minDistanceToRoute({ lat, lon }, coords) <= 25;
+});
+      
       setPois(near);
     } catch (e) {
       alert(e.message);
