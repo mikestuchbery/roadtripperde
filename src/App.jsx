@@ -79,27 +79,56 @@ function routeLengthKm(coords) {
 }
 
 /* ================================
-   WIKIPEDIA
+   WIKIPEDIA RESOLVER
 ================================ */
 async function fetchWikiData(p) {
-  const slug =
-    p.wikipedia ??
-    (p.name ?? p.title ?? p.site)?.replace(/\s/g, "_");
+  const name = p.name ?? p.title ?? p.site;
+  const explicit = p.wikipedia;
 
-  if (!slug) return { image: null, extract: null };
-
-  try {
+  async function summary(title) {
     const r = await fetch(
-      `https://en.wikipedia.org/api/rest_v1/page/summary/${slug}`
+      `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(
+        title
+      )}`
     );
-    const j = await r.json();
-    return {
-      image: j.thumbnail?.source ?? null,
-      extract: j.extract ?? null
-    };
-  } catch {
-    return { image: null, extract: null };
+    if (!r.ok) return null;
+    return r.json();
   }
+
+  /* explicit slug */
+  if (explicit) {
+    const j = await summary(explicit);
+    if (j?.thumbnail)
+      return { image: j.thumbnail.source, extract: j.extract };
+  }
+
+  /* direct title */
+  if (name) {
+    const j = await summary(name.replace(/\s/g, "_"));
+    if (j?.thumbnail)
+      return { image: j.thumbnail.source, extract: j.extract };
+  }
+
+  /* search fallback */
+  if (name) {
+    try {
+      const r = await fetch(
+        `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(
+          name
+        )}&format=json&origin=*`
+      );
+      const j = await r.json();
+      const first = j.query?.search?.[0]?.title;
+
+      if (first) {
+        const s = await summary(first.replace(/\s/g, "_"));
+        if (s?.thumbnail)
+          return { image: s.thumbnail.source, extract: s.extract };
+      }
+    } catch {}
+  }
+
+  return { image: null, extract: null };
 }
 
 /* ================================
@@ -116,30 +145,14 @@ function typeWeight(p) {
 }
 
 /* ================================
-   KO-FI
-================================ */
-function KofiButton() {
-  return (
-    <a
-      href="https://buymeacoffee.com/mikestuchbery"
-      target="_blank"
-      rel="noopener noreferrer"
-      style={kofiStyle}
-    >
-      ☕ Support
-    </a>
-  );
-}
-
-/* ================================
    APP
 ================================ */
 export default function App() {
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [pois, setPois] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [routeKm, setRouteKm] = useState(0);
+  const [loading, setLoading] = useState(false);
 
   async function geocode(place) {
     const r = await fetch(
@@ -164,83 +177,78 @@ export default function App() {
 
     setLoading(true);
 
-    try {
-      const A = await geocode(start);
-      const B = await geocode(end);
-      const coords = await route(A, B);
+    const A = await geocode(start);
+    const B = await geocode(end);
+    const coords = await route(A, B);
 
-      const totalKm = routeLengthKm(coords);
-      setRouteKm(totalKm);
+    const totalKm = routeLengthKm(coords);
+    setRouteKm(totalKm);
 
-      const maxStops = totalKm < 100 ? 4 : 8;
+    const maxStops = totalKm < 100 ? 4 : 8;
 
-      const candidates = ALL_POIS.map(p => {
-        const lat = p.lat ?? p.latitude;
-        const lon = p.lon ?? p.longitude;
-        if (!lat || !lon) return null;
+    const candidates = ALL_POIS.map(p => {
+      const lat = p.lat ?? p.latitude;
+      const lon = p.lon ?? p.longitude;
+      if (!lat || !lon) return null;
 
-        let minDist = Infinity;
-        let routeIndex = 0;
+      let minDist = Infinity;
+      let routeIndex = 0;
 
-        coords.forEach((c, i) => {
-          const d = haversineKm({ lat, lon }, { lat: c[1], lon: c[0] });
-          if (d < minDist) {
-            minDist = d;
-            routeIndex = i;
-          }
-        });
-
-        if (minDist > 25) return null;
-
-        return { ...p, lat, lon, routeIndex, minDist };
-      }).filter(Boolean);
-
-      const segmentSize = coords.length / maxStops;
-      const selected = [];
-
-      for (let s = 0; s < maxStops; s++) {
-        const startIdx = s * segmentSize;
-        const endIdx = (s + 1) * segmentSize;
-
-        const inSeg = candidates.filter(
-          p => p.routeIndex >= startIdx && p.routeIndex < endIdx
-        );
-
-        if (inSeg.length) {
-          selected.push(
-            inSeg.sort(
-              (a, b) =>
-                typeWeight(b) - typeWeight(a) ||
-                a.minDist - b.minDist
-            )[0]
-          );
+      coords.forEach((c, i) => {
+        const d = haversineKm({ lat, lon }, { lat: c[1], lon: c[0] });
+        if (d < minDist) {
+          minDist = d;
+          routeIndex = i;
         }
-      }
+      });
 
-      const enriched = await Promise.all(
-        selected.map(async p => {
-          const wiki = await fetchWikiData(p);
-          const kmFromStart =
-            (p.routeIndex / coords.length) * totalKm;
+      if (minDist > 25) return null;
 
-          return {
-            ...p,
-            image: wiki.image,
-            summary:
-              wiki.extract ??
-              p.summary ??
-              p.description ??
-              "",
-            kmFromStart
-          };
-        })
+      return { ...p, lat, lon, routeIndex, minDist };
+    }).filter(Boolean);
+
+    const segmentSize = coords.length / maxStops;
+    const selected = [];
+
+    for (let s = 0; s < maxStops; s++) {
+      const startIdx = s * segmentSize;
+      const endIdx = (s + 1) * segmentSize;
+
+      const inSeg = candidates.filter(
+        p => p.routeIndex >= startIdx && p.routeIndex < endIdx
       );
 
-      setPois(enriched.sort((a, b) => a.kmFromStart - b.kmFromStart));
-    } catch (e) {
-      alert(e.message);
+      if (inSeg.length) {
+        selected.push(
+          inSeg.sort(
+            (a, b) =>
+              typeWeight(b) - typeWeight(a) ||
+              a.minDist - b.minDist
+          )[0]
+        );
+      }
     }
 
+    const enriched = await Promise.all(
+      selected.map(async p => {
+        const wiki = await fetchWikiData(p);
+        const kmFromStart =
+          (p.routeIndex / coords.length) * totalKm;
+
+        return {
+          ...p,
+          image: wiki.image,
+          summary:
+            wiki.extract ??
+            p.summary ??
+            p.description ??
+            "",
+          kmFromStart
+        };
+      })
+    );
+
+    setPois(enriched.sort((a, b) => a.kmFromStart - b.kmFromStart));
     setLoading(false);
   }
 
@@ -281,26 +289,17 @@ export default function App() {
             const era = p.century ?? p.era ?? "";
             const type = p.type ?? "";
             const maps = `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}`;
+            const img = p.image ?? "/atlas-placeholder.jpg";
 
             return (
-              <div
-                key={i}
-                style={{
-                  ...timelineItem,
-                  ...(window.innerWidth > 900 && i % 2 === 1
-                    ? { alignSelf: "flex-end" }
-                    : {})
-                }}
-              >
+              <div key={i} style={timelineItem}>
                 <div style={card}>
-                  {p.image && (
-                    <div
-                      style={{
-                        ...image,
-                        backgroundImage: `url(${p.image})`
-                      }}
-                    />
-                  )}
+                  <img
+                    src={img}
+                    alt={name}
+                    loading="lazy"
+                    style={image}
+                  />
 
                   <div style={{ padding: 16 }}>
                     <div style={cardTitle}>{name}</div>
@@ -331,14 +330,12 @@ export default function App() {
           })}
         </div>
       </div>
-
-      <KofiButton />
     </div>
   );
 }
 
 /* ================================
-   STYLES (Mobile First)
+   STYLES
 ================================ */
 const page = {
   minHeight: "100vh",
@@ -347,7 +344,7 @@ const page = {
 };
 
 const container = {
-  maxWidth: 1000,
+  maxWidth: 620,
   margin: "0 auto"
 };
 
@@ -390,7 +387,7 @@ const routeMeta = {
 const timeline = {
   display: "flex",
   flexDirection: "column",
-  gap: 24
+  gap: 28
 };
 
 const timelineItem = {
@@ -406,9 +403,10 @@ const card = {
 };
 
 const image = {
-  height: 160,
-  backgroundSize: "cover",
-  backgroundPosition: "center"
+  width: "100%",
+  height: 180,
+  objectFit: "cover",
+  display: "block"
 };
 
 const cardTitle = {
@@ -451,17 +449,4 @@ const mapLink = {
   color: "#7c2f2f",
   textDecoration: "none",
   fontWeight: 600
-};
-
-const kofiStyle = {
-  position: "fixed",
-  right: 16,
-  bottom: 16,
-  background: "#f4d03f",
-  color: "#000",
-  padding: "10px 14px",
-  borderRadius: 8,
-  fontWeight: 700,
-  textDecoration: "none",
-  boxShadow: "0 4px 12px rgba(0,0,0,0.3)"
 };
