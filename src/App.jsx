@@ -18,21 +18,12 @@ import saxonyAnhalt from "./data/saxony-anhalt-pois.json";
 import sh from "./data/schleswig-holstein-pois.json";
 import thuringia from "./data/thuringia-pois.json";
 
-/* ===== SAFE MERGE ALL POIS ===== */
+/* ===== SAFE MERGE ===== */
 function asArray(x) {
   if (!x) return [];
-
-  // already an array
   if (Array.isArray(x)) return x;
-
-  // common wrapper keys
   if (Array.isArray(x.pois)) return x.pois;
   if (Array.isArray(x.data)) return x.data;
-  if (Array.isArray(x.features)) return x.features;
-
-  // single POI object
-  if (x.name && (x.lat || x.latitude)) return [x];
-
   return [];
 }
 
@@ -55,7 +46,7 @@ const ALL_POIS = [
   ...asArray(thuringia),
 ];
 
-/* ===== DISTANCE HELPERS ===== */
+/* ===== DISTANCE ===== */
 function haversineKm(a, b) {
   const R = 6371;
   const dLat = ((b.lat - a.lat) * Math.PI) / 180;
@@ -70,11 +61,11 @@ function haversineKm(a, b) {
   return 2 * R * Math.asin(Math.sqrt(x));
 }
 
-function minDistanceToRoute(poi, coords) {
+function minDistanceToRoute(point, coords) {
   let min = Infinity;
   for (const c of coords) {
     const d = haversineKm(
-      { lat: poi.lat, lon: poi.lon },
+      { lat: point.lat, lon: point.lon },
       { lat: c[1], lon: c[0] }
     );
     if (d < min) min = d;
@@ -82,7 +73,20 @@ function minDistanceToRoute(poi, coords) {
   return min;
 }
 
-/* ===== KO-FI FLOAT ===== */
+/* ===== WIKIPEDIA IMAGE ===== */
+async function wikiImage(slug) {
+  try {
+    const r = await fetch(
+      `https://en.wikipedia.org/api/rest_v1/page/summary/${slug}`
+    );
+    const j = await r.json();
+    return j.thumbnail?.source;
+  } catch {
+    return null;
+  }
+}
+
+/* ===== KO-FI ===== */
 function KofiButton() {
   return (
     <a
@@ -93,15 +97,14 @@ function KofiButton() {
         position: "fixed",
         right: 16,
         bottom: 16,
-        background: "#FFDD00",
+        background: "#f4d03f",
         color: "#000",
         padding: "10px 14px",
         borderRadius: 8,
         fontWeight: 700,
         textDecoration: "none",
         boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-        zIndex: 9999,
-        fontFamily: "system-ui",
+        zIndex: 9999
       }}
     >
       ☕ Buy me a coffee
@@ -109,7 +112,7 @@ function KofiButton() {
   );
 }
 
-/* ===== MAIN APP ===== */
+/* ===== APP ===== */
 export default function App() {
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
@@ -138,83 +141,195 @@ export default function App() {
     if (!start || !end) return;
     setLoading(true);
 
-    try {
-      const A = await geocode(start);
-      const B = await geocode(end);
-      const coords = await route(A, B);
+    const A = await geocode(start);
+    const B = await geocode(end);
+    const coords = await route(A, B);
 
-      const near = ALL_POIS.filter((p) => {
-  const lat = p.lat ?? p.latitude;
-  const lon = p.lon ?? p.longitude;
-  if (!lat || !lon) return false;
-  return minDistanceToRoute({ lat, lon }, coords) <= 25;
-});
-      
-      setPois(near);
-    } catch (e) {
-      alert(e.message);
-    }
+    const near = ALL_POIS
+      .map(p => {
+        const lat = p.lat ?? p.latitude;
+        const lon = p.lon ?? p.longitude;
+        if (!lat || !lon) return null;
+        return {
+          ...p,
+          lat,
+          lon,
+          dist: minDistanceToRoute({ lat, lon }, coords)
+        };
+      })
+      .filter(Boolean)
+      .filter(p => p.dist <= 25)
+      .sort((a, b) => a.dist - b.dist)
+      .slice(0, 10);
 
+    // attach wikipedia images
+    const enriched = await Promise.all(
+      near.map(async p => ({
+        ...p,
+        image: p.wikipedia ? await wikiImage(p.wikipedia) : null
+      }))
+    );
+
+    setPois(enriched);
     setLoading(false);
   }
 
   return (
-    <div style={{ padding: 24, maxWidth: 900, margin: "0 auto" }}>
-      <h1>Germany Roadside History</h1>
+    <div style={{ background: "#f3efe6", minHeight: "100vh", padding: 24 }}>
+      <div style={{ maxWidth: 900, margin: "0 auto" }}>
+        <h1 style={{ fontFamily: "Georgia, serif", color: "#14213d" }}>
+          Roadtripper
+        </h1>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-        <input
-          placeholder="Start"
-          value={start}
-          onChange={(e) => setStart(e.target.value)}
-          style={{ flex: 1, padding: 8 }}
-        />
-        <input
-          placeholder="End"
-          value={end}
-          onChange={(e) => setEnd(e.target.value)}
-          style={{ flex: 1, padding: 8 }}
-        />
-        <button onClick={findStops}>Explore</button>
+        <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+          <input
+            placeholder="Start"
+            value={start}
+            onChange={e => setStart(e.target.value)}
+            style={input}
+          />
+          <input
+            placeholder="Destination"
+            value={end}
+            onChange={e => setEnd(e.target.value)}
+            style={input}
+          />
+          <button onClick={findStops} style={button}>
+            Explore
+          </button>
+        </div>
+
+        {loading && <p>Finding remarkable places…</p>}
+
+        <div style={timeline}>
+          {pois.map((p, i) => {
+            const name = p.name ?? p.title ?? p.site;
+            const era = p.century ?? p.era ?? "";
+            const type = p.type ?? "";
+            const summary = p.summary ?? p.description ?? "";
+            const maps = `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}`;
+
+            return (
+              <div key={i} style={cardWrap}>
+                <div style={dot} />
+
+                <div style={card}>
+                  {p.image && (
+                    <div
+                      style={{
+                        height: 140,
+                        backgroundImage: `url(${p.image})`,
+                        backgroundSize: "cover",
+                        backgroundPosition: "center",
+                        borderTopLeftRadius: 10,
+                        borderTopRightRadius: 10
+                      }}
+                    />
+                  )}
+
+                  <div style={{ padding: 14 }}>
+                    <div style={title}>{name}</div>
+
+                    <div style={pillRow}>
+                      {type && <span style={pill}>{type}</span>}
+                      {era && <span style={pill}>{era}</span>}
+                    </div>
+
+                    <div style={summaryStyle}>{summary}</div>
+
+                    <a href={maps} target="_blank" rel="noreferrer" style={link}>
+                      Open in Maps →
+                    </a>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
-
-      {loading && <p>Finding places along your route…</p>}
-
-      {pois.map((p, i) => {
-  const name = p.name ?? p.title ?? p.site ?? "Unknown site";
-  const era = p.era ?? p.period ?? p.century ?? "";
-  const summary = p.summary ?? p.description ?? p.notes ?? "";
-
-  return (
-    <div
-      key={i}
-      style={{
-        background: "#fff",
-        border: "1px solid #e2e2e2",
-        borderRadius: 10,
-        padding: 16,
-        marginBottom: 12,
-        boxShadow: "0 2px 6px rgba(0,0,0,0.06)"
-      }}
-    >
-      <div style={{ fontWeight: 700, fontSize: 16 }}>{name}</div>
-
-      {era && (
-        <div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>
-          {era}
-        </div>
-      )}
-
-      {summary && (
-        <div style={{ fontSize: 14, lineHeight: 1.45 }}>
-          {summary}
-        </div>
-      )}
-    </div>
-  );
-})}
 
       <KofiButton />
     </div>
   );
 }
+
+/* ===== STYLES ===== */
+const input = {
+  flex: 1,
+  padding: "10px 12px",
+  border: "1px solid #c9c3b5",
+  borderRadius: 6,
+  background: "#fffdf7"
+};
+
+const button = {
+  padding: "10px 16px",
+  borderRadius: 6,
+  border: "1px solid #9e2a2b",
+  background: "#9e2a2b",
+  color: "#fff",
+  fontWeight: 600
+};
+
+const timeline = {
+  position: "relative",
+  paddingLeft: 30
+};
+
+const cardWrap = {
+  position: "relative",
+  marginBottom: 22
+};
+
+const dot = {
+  position: "absolute",
+  left: -22,
+  top: 10,
+  width: 10,
+  height: 10,
+  borderRadius: "50%",
+  background: "#14213d"
+};
+
+const card = {
+  background: "#fffdf7",
+  border: "1px solid #c9c3b5",
+  borderRadius: 10,
+  overflow: "hidden",
+  boxShadow: "0 2px 4px rgba(0,0,0,0.06)"
+};
+
+const title = {
+  fontFamily: "Georgia, serif",
+  fontWeight: 700,
+  fontSize: 16,
+  color: "#14213d",
+  marginBottom: 6
+};
+
+const pillRow = {
+  display: "flex",
+  gap: 6,
+  marginBottom: 8
+};
+
+const pill = {
+  background: "#14213d",
+  color: "#fff",
+  padding: "2px 6px",
+  fontSize: 11,
+  borderRadius: 4
+};
+
+const summaryStyle = {
+  fontSize: 14,
+  lineHeight: 1.45,
+  marginBottom: 8
+};
+
+const link = {
+  fontSize: 13,
+  color: "#9e2a2b",
+  textDecoration: "none",
+  fontWeight: 600
+};
