@@ -18,13 +18,12 @@ import saxonyAnhalt from "./data/saxony-anhalt-pois.json";
 import sh from "./data/schleswig-holstein-pois.json";
 import thuringia from "./data/thuringia-pois.json";
 
-/* ========= SAFE MERGE ========= */
+/* ========= MERGE ========= */
 function asArray(x) {
   if (!x) return [];
   if (Array.isArray(x)) return x;
   if (Array.isArray(x.pois)) return x.pois;
   if (Array.isArray(x.data)) return x.data;
-  if (Array.isArray(x.features)) return x.features;
   if (x.name) return [x];
   return [];
 }
@@ -132,6 +131,33 @@ function KofiButton() {
   );
 }
 
+/* ========= ATLAS ROUTE ANIMATION ========= */
+function AtlasRoute() {
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div className="route-line" />
+      <style>{`
+        .route-line {
+          height: 2px;
+          background: repeating-linear-gradient(
+            to right,
+            #6b4f2a 0,
+            #6b4f2a 6px,
+            transparent 6px,
+            transparent 12px
+          );
+          animation: routeMove 2s linear infinite;
+        }
+
+        @keyframes routeMove {
+          from { background-position: 0 0; }
+          to { background-position: 24px 0; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 /* ========= CARD ========= */
 function Card({ poi }) {
   const name = poi.name ?? poi.title ?? "Site";
@@ -144,31 +170,28 @@ function Card({ poi }) {
   }, [name]);
 
   return (
-    <div
-      style={{
-        background: "#FBF7E6",
-        border: "1px solid #E2D6B8",
-        borderRadius: 12,
-        overflow: "hidden",
-        marginBottom: 14,
-      }}
-    >
-      {img && (
-        <img
-          src={img}
-          alt={name}
-          style={{ width: "100%", height: 180, objectFit: "cover" }}
-        />
-      )}
-
+    <div style={card}>
+      {img && <img src={img} alt={name} style={cardImg} />}
       <div style={{ padding: 14 }}>
-        <div style={{ fontWeight: 700, marginBottom: 4 }}>{name}</div>
-        {era && (
-          <div style={{ fontSize: 12, color: "#7a6f4a", marginBottom: 6 }}>
-            {era}
-          </div>
-        )}
-        {summary && <div style={{ fontSize: 14 }}>{summary}</div>}
+        <div style={cardTitle}>{name}</div>
+        {era && <div style={cardEra}>{era}</div>}
+        {summary && <div style={cardText}>{summary}</div>}
+      </div>
+    </div>
+  );
+}
+
+/* ========= FOOTER ========= */
+function Footer() {
+  return (
+    <div style={{ marginTop: 40, textAlign: "center", color: "#6b4f2a" }}>
+      <div style={{ marginBottom: 6 }}>
+        You’ve reached the end of this road.
+      </div>
+
+      <div style={{ fontSize: 13 }}>
+        A labour of love by{" "}
+        <a href="mailto:mike@example.com">Mike Stuchbery</a>
       </div>
     </div>
   );
@@ -180,7 +203,6 @@ export default function App() {
   const [end, setEnd] = useState("");
   const [pois, setPois] = useState([]);
   const [visibleCount, setVisibleCount] = useState(8);
-  const [loading, setLoading] = useState(false);
 
   async function geocode(place) {
     const r = await fetch(
@@ -202,85 +224,77 @@ export default function App() {
 
   async function findStops() {
     if (!start || !end) return;
-    setLoading(true);
 
-    try {
-      const A = await geocode(start);
-      const B = await geocode(end);
-      const coords = await route(A, B);
+    const A = await geocode(start);
+    const B = await geocode(end);
+    const coords = await route(A, B);
 
-      const candidates = [];
+    const candidates = [];
 
-      ALL_POIS.forEach((p) => {
-        const lat = p.lat ?? p.latitude;
-        const lon = p.lon ?? p.longitude;
-        if (!lat || !lon) return;
+    ALL_POIS.forEach((p) => {
+      const lat = p.lat ?? p.latitude;
+      const lon = p.lon ?? p.longitude;
+      if (!lat || !lon) return;
 
-        const { distance, index } = minDistanceToRoute(
-          { lat, lon },
-          coords
-        );
+      const { distance, index } = minDistanceToRoute(
+        { lat, lon },
+        coords
+      );
 
-        if (distance <= 25) {
-          candidates.push({
-            ...p,
-            lat,
-            lon,
-            routeIndex: index,
-          });
-        }
-      });
+      if (distance <= 25) {
+        candidates.push({
+          ...p,
+          lat,
+          lon,
+          routeIndex: index,
+        });
+      }
+    });
 
-      candidates.sort((a, b) => a.routeIndex - b.routeIndex);
+    candidates.sort((a, b) => a.routeIndex - b.routeIndex);
 
-      const routeKm = haversineKm(A, B);
-      const initial = routeKm < 100 ? 4 : 8;
+    const routeKm = haversineKm(A, B);
+    const initial = routeKm < 100 ? 4 : 8;
 
-      setPois(candidates);
-      setVisibleCount(initial);
-    } catch (e) {
-      alert(e.message);
-    }
-
-    setLoading(false);
+    setPois(candidates);
+    setVisibleCount(initial);
   }
 
   const shown = pois.slice(0, visibleCount);
 
-  return (
-    <div
-      style={{
-        background: "#F4ECD8",
-        minHeight: "100vh",
-        fontFamily: "system-ui",
-      }}
-    >
-      <div
-        style={{
-          maxWidth: 520,
-          margin: "0 auto",
-          padding: 16,
-        }}
-      >
-        <h1 style={{ marginBottom: 12 }}>Roadtripper</h1>
+  const journeyActive = pois.length > 0;
 
-        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+  return (
+    <div style={page}>
+      <div style={container}>
+        <h1 style={title}>Roadtripper</h1>
+
+        {!journeyActive && (
+          <div style={hero}>
+            <div style={tagline}>
+              Where shall we wander today?
+            </div>
+            <AtlasRoute />
+          </div>
+        )}
+
+        <div style={inputRow}>
           <input
             placeholder="Start"
             value={start}
             onChange={(e) => setStart(e.target.value)}
-            style={{ flex: 1, padding: 10 }}
+            style={input}
           />
           <input
-            placeholder="End"
+            placeholder="Destination"
             value={end}
             onChange={(e) => setEnd(e.target.value)}
-            style={{ flex: 1, padding: 10 }}
+            style={input}
           />
-          <button onClick={findStops}>Go</button>
+          <button onClick={findStops} style={button}>
+            Explore
+          </button>
         </div>
-
-        {loading && <p>Finding places…</p>}
 
         {shown.map((p, i) => (
           <Card key={i} poi={p} />
@@ -289,45 +303,106 @@ export default function App() {
         {visibleCount < pois.length && (
           <button
             onClick={() => setVisibleCount((v) => v + 6)}
-            style={{
-              width: "100%",
-              marginTop: 12,
-              padding: 12,
-              background: "#E7D9A8",
-              border: "1px solid #C8B98A",
-              borderRadius: 8,
-            }}
+            style={loadMore}
           >
-            Load more along route →
+            Continue along the road →
           </button>
         )}
 
-        {pois.length > 0 && (
-          <div
-            style={{
-              marginTop: 20,
-              padding: 14,
-              background: "#E7D9A8",
-              borderRadius: 10,
-            }}
-          >
-            <strong>Open journey in Maps</strong>
-            <div style={{ marginTop: 6 }}>
-              <a
-                href={`https://www.google.com/maps/dir/${encodeURIComponent(
-                  start
-                )}/${encodeURIComponent(end)}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Open route →
-              </a>
-            </div>
-          </div>
-        )}
+        {journeyActive && <Footer />}
       </div>
 
       <KofiButton />
     </div>
   );
 }
+
+/* ========= STYLES ========= */
+
+const page = {
+  background: "#F4ECD8",
+  minHeight: "100vh",
+  padding: 20,
+  fontFamily: "system-ui",
+};
+
+const container = {
+  maxWidth: 520,
+  margin: "0 auto",
+};
+
+const title = {
+  marginBottom: 6,
+  color: "#2A2116",
+};
+
+const hero = {
+  textAlign: "center",
+  marginBottom: 20,
+};
+
+const tagline = {
+  color: "#6b4f2a",
+  marginBottom: 6,
+};
+
+const inputRow = {
+  display: "flex",
+  gap: 8,
+  marginBottom: 16,
+};
+
+const input = {
+  flex: 1,
+  padding: 10,
+  borderRadius: 6,
+  border: "1px solid #E2D6B8",
+  background: "#FBF7E6",
+};
+
+const button = {
+  padding: "10px 14px",
+  borderRadius: 6,
+  border: "1px solid #6B4F2A",
+  background: "#6B4F2A",
+  color: "#fff",
+};
+
+const card = {
+  background: "#FBF7E6",
+  border: "1px solid #E2D6B8",
+  borderRadius: 12,
+  overflow: "hidden",
+  marginBottom: 14,
+};
+
+const cardImg = {
+  width: "100%",
+  height: 180,
+  objectFit: "cover",
+};
+
+const cardTitle = {
+  fontWeight: 700,
+  marginBottom: 4,
+  color: "#2A2116",
+};
+
+const cardEra = {
+  fontSize: 12,
+  color: "#7a6f4a",
+  marginBottom: 6,
+};
+
+const cardText = {
+  fontSize: 14,
+};
+
+const loadMore = {
+  width: "100%",
+  padding: 12,
+  marginTop: 8,
+  background: "#E7D9A8",
+  border: "1px solid #C8B98A",
+  borderRadius: 8,
+};
