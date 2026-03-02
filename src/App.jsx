@@ -1,129 +1,182 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
-// Theme (unchanged from preview)
-const T = {
-  bg: "#f5f2eb",
-  surface: "#ffffff",
-  card: "#fafaf7",
-  border: "#d8d3c8",
-  borderDark: "#b8b0a0",
-  ink: "#1a1a18",
-  inkMid: "#4a4740",
-  inkFaint: "#8a8680",
-  red: "#b83232",
-  green: "#2d6e3e",
-  blue: "#1a4a7a",
-  mono: "'IBM Plex Mono', 'Courier New', monospace",
-  serif: "'Lora', Georgia, serif",
-  sans: "'IBM Plex Sans', system-ui, sans-serif",
-};
+/* ===== IMPORT STATE POIS ===== */
+import baden from "./data/baden-wuerttemberg-pois.json";
+import bavaria from "./data/bavaria-pois.json";
+import berlin from "./data/berlin-pois.json";
+import brandenburg from "./data/brandenburg-pois.json";
+import bremen from "./data/bremen-pois.json";
+import hamburg from "./data/hamburg-pois.json";
+import hesse from "./data/hesse-pois.json";
+import lowerSaxony from "./data/lower-saxony-pois.json";
+import meckpom from "./data/mecklenburg-vorpommern-pois.json";
+import nrw from "./data/north-rhine-westphalia-pois.json";
+import rlp from "./data/rhineland-palatinate-pois.json";
+import saarland from "./data/saarland-pois.json";
+import saxony from "./data/saxony-pois.json";
+import saxonyAnhalt from "./data/saxony-anhalt-pois.json";
+import sh from "./data/schleswig-holstein-pois.json";
+import thuringia from "./data/thuringia-pois.json";
 
-// Load all state POIs from JSON files
-async function loadAllPOIs() {
-  const files = [
-    "baden-wuerttemberg-pois.json",
-    "bavaria-pois.json",
-    "berlin-pois.json",
-    "brandenburg-pois.json",
-    "bremen-pois.json",
-    "hamburg-pois.json",
-    "hesse-pois.json",
-    "lower-saxony-pois.json",
-    "mecklenburg-vorpommern-pois.json",
-    "north-rhine-westphalia-pois.json",
-    "rhineland-palatinate-pois.json",
-    "saarland-pois.json",
-    "saxony-pois.json",
-    "saxony-anhalt-pois.json",
-    "schleswig-holstein-pois.json",
-    "thuringia-pois.json",
-  ];
+/* ===== MERGE ALL POIS ===== */
+const ALL_POIS = [
+  ...baden,
+  ...bavaria,
+  ...berlin,
+  ...brandenburg,
+  ...bremen,
+  ...hamburg,
+  ...hesse,
+  ...lowerSaxony,
+  ...meckpom,
+  ...nrw,
+  ...rlp,
+  ...saarland,
+  ...saxony,
+  ...saxonyAnhalt,
+  ...sh,
+  ...thuringia,
+];
 
-  const all = [];
-  for (const f of files) {
-    const mod = await import(`./data/${f}`);
-    all.push(...mod.default);
-  }
-  return all;
+/* ===== DISTANCE HELPERS ===== */
+function haversineKm(a, b) {
+  const R = 6371;
+  const dLat = (b.lat - a.lat) * Math.PI / 180;
+  const dLon = (b.lon - a.lon) * Math.PI / 180;
+  const lat1 = a.lat * Math.PI / 180;
+  const lat2 = b.lat * Math.PI / 180;
+
+  const x =
+    Math.sin(dLat / 2) ** 2 +
+    Math.sin(dLon / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
+
+  return 2 * R * Math.asin(Math.sqrt(x));
 }
 
-export default function App() {
-  const [pois, setPois] = useState([]);
-  const [filter, setFilter] = useState("");
-  const [loading, setLoading] = useState(true);
+function minDistanceToRoute(poi, coords) {
+  let min = Infinity;
+  for (const c of coords) {
+    const d = haversineKm(
+      { lat: poi.lat, lon: poi.lon },
+      { lat: c[1], lon: c[0] }
+    );
+    if (d < min) min = d;
+  }
+  return min;
+}
 
-  useEffect(() => {
-    loadAllPOIs().then((data) => {
-      setPois(data);
-      setLoading(false);
-    });
-  }, []);
-
-  const filtered = pois.filter((p) =>
-    p.name?.toLowerCase().includes(filter.toLowerCase())
-  );
-
+/* ===== KO-FI FLOAT ===== */
+function KofiButton() {
   return (
-    <div
+    <a
+      href="https://buymeacoffee.com/mikestuchbery"
+      target="_blank"
+      rel="noopener noreferrer"
       style={{
-        minHeight: "100vh",
-        background: T.bg,
-        fontFamily: T.sans,
-        color: T.ink,
-        padding: 24,
+        position: "fixed",
+        right: 16,
+        bottom: 16,
+        background: "#FFDD00",
+        color: "#000",
+        padding: "10px 14px",
+        borderRadius: 8,
+        fontWeight: 700,
+        textDecoration: "none",
+        boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+        zIndex: 9999,
+        fontFamily: "system-ui",
       }}
     >
-      <h1 style={{ fontFamily: T.serif, marginBottom: 8 }}>
-        Germany Roadside Stops
-      </h1>
-      <p style={{ color: T.inkMid, marginBottom: 16 }}>
-        Historic, cultural, and scenic places along your route.
-      </p>
+      ☕ Buy me a coffee
+    </a>
+  );
+}
 
-      <input
-        placeholder="Search places…"
-        value={filter}
-        onChange={(e) => setFilter(e.target.value)}
-        style={{
-          padding: 10,
-          border: `1px solid ${T.border}`,
-          borderRadius: 6,
-          marginBottom: 20,
-          width: "100%",
-          maxWidth: 420,
-          fontFamily: T.sans,
-        }}
-      />
+/* ===== MAIN APP ===== */
+export default function App() {
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
+  const [pois, setPois] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-      {loading ? (
-        <div>Loading POIs…</div>
-      ) : (
+  async function geocode(place) {
+    const r = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+        place
+      )}`
+    );
+    const j = await r.json();
+    if (!j[0]) throw new Error("Location not found");
+    return { lat: +j[0].lat, lon: +j[0].lon };
+  }
+
+  async function route(a, b) {
+    const url = `https://router.project-osrm.org/route/v1/driving/${a.lon},${a.lat};${b.lon},${b.lat}?overview=full&geometries=geojson`;
+    const r = await fetch(url);
+    const j = await r.json();
+    return j.routes[0].geometry.coordinates;
+  }
+
+  async function findStops() {
+    if (!start || !end) return;
+    setLoading(true);
+
+    try {
+      const A = await geocode(start);
+      const B = await geocode(end);
+      const coords = await route(A, B);
+
+      const near = ALL_POIS.filter(
+        (p) => minDistanceToRoute(p, coords) <= 25
+      );
+
+      setPois(near);
+    } catch (e) {
+      alert(e.message);
+    }
+
+    setLoading(false);
+  }
+
+  return (
+    <div style={{ padding: 24, maxWidth: 900, margin: "0 auto" }}>
+      <h1>Germany Roadside History</h1>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <input
+          placeholder="Start"
+          value={start}
+          onChange={(e) => setStart(e.target.value)}
+          style={{ flex: 1, padding: 8 }}
+        />
+        <input
+          placeholder="End"
+          value={end}
+          onChange={(e) => setEnd(e.target.value)}
+          style={{ flex: 1, padding: 8 }}
+        />
+        <button onClick={findStops}>Explore</button>
+      </div>
+
+      {loading && <p>Finding places along your route…</p>}
+
+      {pois.map((p, i) => (
         <div
+          key={i}
           style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))",
-            gap: 16,
+            border: "1px solid #ddd",
+            padding: 12,
+            marginBottom: 8,
+            borderRadius: 6,
           }}
         >
-          {filtered.map((p, i) => (
-            <div
-              key={i}
-              style={{
-                background: T.card,
-                border: `1px solid ${T.border}`,
-                borderRadius: 8,
-                padding: 14,
-              }}
-            >
-              <div style={{ fontWeight: 600, marginBottom: 4 }}>{p.name}</div>
-              <div style={{ fontSize: 13, color: T.inkMid, marginBottom: 6 }}>
-                {p.type} • {p.state}
-              </div>
-              <div style={{ fontSize: 13 }}>{p.summary || p.description}</div>
-            </div>
-          ))}
+          <strong>{p.name}</strong>
+          <div>{p.era}</div>
+          <p>{p.summary}</p>
         </div>
-      )}
+      ))}
+
+      <KofiButton />
     </div>
   );
 }
