@@ -18,33 +18,40 @@ import saxonyAnhalt from "./data/saxony-anhalt-pois.json";
 import sh from "./data/schleswig-holstein-pois.json";
 import thuringia from "./data/thuringia-pois.json";
 
-/* ===== MERGE ALL POIS ===== */
+/* ===== SAFE MERGE ALL POIS ===== */
+function asArray(x) {
+  if (!x) return [];
+  if (Array.isArray(x)) return x;
+  if (Array.isArray(x.pois)) return x.pois;
+  return [];
+}
+
 const ALL_POIS = [
-  ...baden,
-  ...bavaria,
-  ...berlin,
-  ...brandenburg,
-  ...bremen,
-  ...hamburg,
-  ...hesse,
-  ...lowerSaxony,
-  ...meckpom,
-  ...nrw,
-  ...rlp,
-  ...saarland,
-  ...saxony,
-  ...saxonyAnhalt,
-  ...sh,
-  ...thuringia,
+  ...asArray(baden),
+  ...asArray(bavaria),
+  ...asArray(berlin),
+  ...asArray(brandenburg),
+  ...asArray(bremen),
+  ...asArray(hamburg),
+  ...asArray(hesse),
+  ...asArray(lowerSaxony),
+  ...asArray(meckpom),
+  ...asArray(nrw),
+  ...asArray(rlp),
+  ...asArray(saarland),
+  ...asArray(saxony),
+  ...asArray(saxonyAnhalt),
+  ...asArray(sh),
+  ...asArray(thuringia),
 ];
 
 /* ===== DISTANCE HELPERS ===== */
 function haversineKm(a, b) {
   const R = 6371;
-  const dLat = (b.lat - a.lat) * Math.PI / 180;
-  const dLon = (b.lon - a.lon) * Math.PI / 180;
-  const lat1 = a.lat * Math.PI / 180;
-  const lat2 = b.lat * Math.PI / 180;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLon = ((b.lon - a.lon) * Math.PI) / 180;
+  const lat1 = (a.lat * Math.PI) / 180;
+  const lat2 = (b.lat * Math.PI) / 180;
 
   const x =
     Math.sin(dLat / 2) ** 2 +
@@ -127,7 +134,7 @@ export default function App() {
       const coords = await route(A, B);
 
       const near = ALL_POIS.filter(
-        (p) => minDistanceToRoute(p, coords) <= 25
+        (p) => p.lat && p.lon && minDistanceToRoute(p, coords) <= 25
       );
 
       setPois(near);
