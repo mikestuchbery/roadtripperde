@@ -51,7 +51,7 @@ const ALL_POIS = [
 ];
 
 /* ================================
-   GEO HELPERS
+   GEO
 ================================ */
 function haversineKm(a, b) {
   const R = 6371;
@@ -67,20 +67,52 @@ function haversineKm(a, b) {
   return 2 * R * Math.asin(Math.sqrt(x));
 }
 
+function routeLengthKm(coords) {
+  let sum = 0;
+  for (let i = 1; i < coords.length; i++) {
+    sum += haversineKm(
+      { lat: coords[i - 1][1], lon: coords[i - 1][0] },
+      { lat: coords[i][1], lon: coords[i][0] }
+    );
+  }
+  return sum;
+}
+
 /* ================================
-   WIKIPEDIA IMAGE
+   WIKIPEDIA
 ================================ */
-async function fetchWikiImage(slug) {
-  if (!slug) return null;
+async function fetchWikiData(p) {
+  const slug =
+    p.wikipedia ??
+    (p.name ?? p.title ?? p.site)?.replace(/\s/g, "_");
+
+  if (!slug) return { image: null, extract: null };
+
   try {
     const r = await fetch(
       `https://en.wikipedia.org/api/rest_v1/page/summary/${slug}`
     );
     const j = await r.json();
-    return j.thumbnail?.source ?? null;
+    return {
+      image: j.thumbnail?.source ?? null,
+      extract: j.extract ?? null
+    };
   } catch {
-    return null;
+    return { image: null, extract: null };
   }
+}
+
+/* ================================
+   TYPE WEIGHT
+================================ */
+function typeWeight(p) {
+  const t = (p.type ?? "").toLowerCase();
+  if (t.includes("unesco")) return 5;
+  if (t.includes("castle")) return 4;
+  if (t.includes("cathedral")) return 4;
+  if (t.includes("city")) return 3;
+  if (t.includes("museum")) return 2;
+  return 1;
 }
 
 /* ================================
@@ -107,8 +139,8 @@ export default function App() {
   const [end, setEnd] = useState("");
   const [pois, setPois] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [routeKm, setRouteKm] = useState(0);
 
-  /* ---------- GEOCODE ---------- */
   async function geocode(place) {
     const r = await fetch(
       `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
@@ -120,7 +152,6 @@ export default function App() {
     return { lat: +j[0].lat, lon: +j[0].lon };
   }
 
-  /* ---------- ROUTE ---------- */
   async function route(a, b) {
     const url = `https://router.project-osrm.org/route/v1/driving/${a.lon},${a.lat};${b.lon},${b.lat}?overview=full&geometries=geojson`;
     const r = await fetch(url);
@@ -128,7 +159,6 @@ export default function App() {
     return j.routes[0].geometry.coordinates;
   }
 
-  /* ---------- FIND STOPS ---------- */
   async function findStops() {
     if (!start || !end) return;
 
@@ -139,7 +169,12 @@ export default function App() {
       const B = await geocode(end);
       const coords = await route(A, B);
 
-      const candidates = ALL_POIS.map((p) => {
+      const totalKm = routeLengthKm(coords);
+      setRouteKm(totalKm);
+
+      const maxStops = totalKm < 100 ? 4 : 8;
+
+      const candidates = ALL_POIS.map(p => {
         const lat = p.lat ?? p.latitude;
         const lon = p.lon ?? p.longitude;
         if (!lat || !lon) return null;
@@ -148,10 +183,7 @@ export default function App() {
         let routeIndex = 0;
 
         coords.forEach((c, i) => {
-          const d = haversineKm(
-            { lat, lon },
-            { lat: c[1], lon: c[0] }
-          );
+          const d = haversineKm({ lat, lon }, { lat: c[1], lon: c[0] });
           if (d < minDist) {
             minDist = d;
             routeIndex = i;
@@ -160,26 +192,51 @@ export default function App() {
 
         if (minDist > 25) return null;
 
-        return {
-          ...p,
-          lat,
-          lon,
-          routeIndex
-        };
-      })
-        .filter(Boolean)
-        .sort((a, b) => a.routeIndex - b.routeIndex)
-        .slice(0, 10);
+        return { ...p, lat, lon, routeIndex, minDist };
+      }).filter(Boolean);
 
-      /* attach images */
+      const segmentSize = coords.length / maxStops;
+      const selected = [];
+
+      for (let s = 0; s < maxStops; s++) {
+        const startIdx = s * segmentSize;
+        const endIdx = (s + 1) * segmentSize;
+
+        const inSeg = candidates.filter(
+          p => p.routeIndex >= startIdx && p.routeIndex < endIdx
+        );
+
+        if (inSeg.length) {
+          selected.push(
+            inSeg.sort(
+              (a, b) =>
+                typeWeight(b) - typeWeight(a) ||
+                a.minDist - b.minDist
+            )[0]
+          );
+        }
+      }
+
       const enriched = await Promise.all(
-        candidates.map(async (p) => ({
-          ...p,
-          image: await fetchWikiImage(p.wikipedia)
-        }))
+        selected.map(async p => {
+          const wiki = await fetchWikiData(p);
+          const kmFromStart =
+            (p.routeIndex / coords.length) * totalKm;
+
+          return {
+            ...p,
+            image: wiki.image,
+            summary:
+              wiki.extract ??
+              p.summary ??
+              p.description ??
+              "",
+            kmFromStart
+          };
+        })
       );
 
-      setPois(enriched);
+      setPois(enriched.sort((a, b) => a.kmFromStart - b.kmFromStart));
     } catch (e) {
       alert(e.message);
     }
@@ -187,9 +244,6 @@ export default function App() {
     setLoading(false);
   }
 
-  /* ================================
-     RENDER
-  ================================ */
   return (
     <div style={page}>
       <div style={container}>
@@ -199,13 +253,13 @@ export default function App() {
           <input
             placeholder="Start"
             value={start}
-            onChange={(e) => setStart(e.target.value)}
+            onChange={e => setStart(e.target.value)}
             style={input}
           />
           <input
             placeholder="Destination"
             value={end}
-            onChange={(e) => setEnd(e.target.value)}
+            onChange={e => setEnd(e.target.value)}
             style={input}
           />
           <button onClick={findStops} style={button}>
@@ -213,20 +267,31 @@ export default function App() {
           </button>
         </div>
 
-        {loading && <p style={{ color: "#555" }}>Tracing route…</p>}
+        {routeKm > 0 && (
+          <div style={routeMeta}>
+            {routeKm.toFixed(0)} km journey
+          </div>
+        )}
+
+        {loading && <p>Tracing route…</p>}
 
         <div style={timeline}>
           {pois.map((p, i) => {
             const name = p.name ?? p.title ?? p.site;
             const era = p.century ?? p.era ?? "";
             const type = p.type ?? "";
-            const summary = p.summary ?? p.description ?? "";
             const maps = `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}`;
 
             return (
-              <div key={i} style={item}>
-                <div style={dot} />
-
+              <div
+                key={i}
+                style={{
+                  ...timelineItem,
+                  ...(window.innerWidth > 900 && i % 2 === 1
+                    ? { alignSelf: "flex-end" }
+                    : {})
+                }}
+              >
                 <div style={card}>
                   {p.image && (
                     <div
@@ -237,7 +302,7 @@ export default function App() {
                     />
                   )}
 
-                  <div style={{ padding: 14 }}>
+                  <div style={{ padding: 16 }}>
                     <div style={cardTitle}>{name}</div>
 
                     <div style={pillRow}>
@@ -245,7 +310,11 @@ export default function App() {
                       {era && <span style={pill}>{era}</span>}
                     </div>
 
-                    <div style={summaryText}>{summary}</div>
+                    <div style={summaryText}>{p.summary}</div>
+
+                    <div style={kmLabel}>
+                      {p.kmFromStart.toFixed(0)} km from start
+                    </div>
 
                     <a
                       href={maps}
@@ -269,70 +338,63 @@ export default function App() {
 }
 
 /* ================================
-   STYLES
+   STYLES (Mobile First)
 ================================ */
-
 const page = {
   minHeight: "100vh",
-  background: "#efe9dc",
-  padding: 24
+  background: "#f1ecdf",
+  padding: 20
 };
 
 const container = {
-  maxWidth: 920,
+  maxWidth: 1000,
   margin: "0 auto"
 };
 
 const title = {
   fontFamily: "Georgia, serif",
   fontWeight: 700,
-  color: "#13213a",
+  color: "#10223a",
   marginBottom: 18
 };
 
 const controls = {
   display: "flex",
-  gap: 8,
-  marginBottom: 22,
-  flexWrap: "wrap"
+  flexDirection: "column",
+  gap: 10,
+  marginBottom: 20
 };
 
 const input = {
-  flex: 1,
-  padding: "10px 12px",
+  padding: "12px",
   border: "1px solid #c6bfae",
   borderRadius: 6,
   background: "#fffdf6"
 };
 
 const button = {
-  padding: "10px 16px",
+  padding: "12px",
   borderRadius: 6,
-  border: "1px solid #8c2f2f",
-  background: "#8c2f2f",
+  border: "1px solid #7c2f2f",
+  background: "#7c2f2f",
   color: "#fff",
   fontWeight: 600
 };
 
+const routeMeta = {
+  marginBottom: 14,
+  fontSize: 13,
+  color: "#555"
+};
+
 const timeline = {
-  position: "relative",
-  paddingLeft: 34,
-  borderLeft: "2px solid #c6bfae"
+  display: "flex",
+  flexDirection: "column",
+  gap: 24
 };
 
-const item = {
-  position: "relative",
-  marginBottom: 26
-};
-
-const dot = {
-  position: "absolute",
-  left: -7,
-  top: 12,
-  width: 12,
-  height: 12,
-  borderRadius: "50%",
-  background: "#13213a"
+const timelineItem = {
+  width: "100%"
 };
 
 const card = {
@@ -340,11 +402,11 @@ const card = {
   border: "1px solid #c6bfae",
   borderRadius: 10,
   overflow: "hidden",
-  boxShadow: "0 2px 6px rgba(0,0,0,0.06)"
+  boxShadow: "0 3px 8px rgba(0,0,0,0.06)"
 };
 
 const image = {
-  height: 150,
+  height: 160,
   backgroundSize: "cover",
   backgroundPosition: "center"
 };
@@ -352,35 +414,41 @@ const image = {
 const cardTitle = {
   fontFamily: "Georgia, serif",
   fontWeight: 700,
-  fontSize: 16,
-  color: "#13213a",
+  fontSize: 17,
+  color: "#10223a",
   marginBottom: 6
 };
 
 const pillRow = {
   display: "flex",
   gap: 6,
-  marginBottom: 8
+  marginBottom: 10
 };
 
 const pill = {
-  background: "#13213a",
+  background: "#10223a",
   color: "#fff",
-  padding: "2px 6px",
+  padding: "3px 8px",
   fontSize: 11,
   borderRadius: 4
 };
 
 const summaryText = {
   fontSize: 14,
-  lineHeight: 1.45,
-  marginBottom: 8,
+  lineHeight: 1.5,
+  marginBottom: 10,
   color: "#333"
+};
+
+const kmLabel = {
+  fontSize: 12,
+  color: "#666",
+  marginBottom: 6
 };
 
 const mapLink = {
   fontSize: 13,
-  color: "#8c2f2f",
+  color: "#7c2f2f",
   textDecoration: "none",
   fontWeight: 600
 };
