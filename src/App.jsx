@@ -180,21 +180,39 @@ export default function App() {
 
       {loading && <p>Finding places along your route…</p>}
 
-      {pois.map((p, i) => (
-        <div
-          key={i}
-          style={{
-            border: "1px solid #ddd",
-            padding: 12,
-            marginBottom: 8,
-            borderRadius: 6,
-          }}
-        >
-          <strong>{p.name}</strong>
-          <div>{p.era}</div>
-          <p>{p.summary}</p>
+      {pois.map((p, i) => {
+  const name = p.name ?? p.title ?? p.site ?? "Unknown site";
+  const era = p.era ?? p.period ?? p.century ?? "";
+  const summary = p.summary ?? p.description ?? p.notes ?? "";
+
+  return (
+    <div
+      key={i}
+      style={{
+        background: "#fff",
+        border: "1px solid #e2e2e2",
+        borderRadius: 10,
+        padding: 16,
+        marginBottom: 12,
+        boxShadow: "0 2px 6px rgba(0,0,0,0.06)"
+      }}
+    >
+      <div style={{ fontWeight: 700, fontSize: 16 }}>{name}</div>
+
+      {era && (
+        <div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>
+          {era}
         </div>
-      ))}
+      )}
+
+      {summary && (
+        <div style={{ fontSize: 14, lineHeight: 1.45 }}>
+          {summary}
+        </div>
+      )}
+    </div>
+  );
+})}
 
       <KofiButton />
     </div>
