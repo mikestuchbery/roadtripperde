@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 /* ========= IMPORT POIS ========= */
 import baden from "./data/baden-wuerttemberg-pois.json";
@@ -65,35 +65,23 @@ function haversineKm(a, b) {
 
 function minDistanceToRoute(poi, coords) {
   let min = Infinity;
-  for (const c of coords) {
+  let idx = 0;
+
+  coords.forEach((c, i) => {
     const d = haversineKm(
       { lat: poi.lat, lon: poi.lon },
       { lat: c[1], lon: c[0] }
     );
-    if (d < min) min = d;
-  }
-  return min;
-}
-
-function routePosition(poi, coords) {
-  let bestIndex = 0;
-  let bestDist = Infinity;
-
-  for (let i = 0; i < coords.length; i++) {
-    const d = haversineKm(
-      { lat: poi.lat, lon: poi.lon },
-      { lat: coords[i][1], lon: coords[i][0] }
-    );
-    if (d < bestDist) {
-      bestDist = d;
-      bestIndex = i;
+    if (d < min) {
+      min = d;
+      idx = i;
     }
-  }
+  });
 
-  return bestIndex / coords.length;
+  return { distance: min, index: idx };
 }
 
-/* ========= WIKIPEDIA IMAGE ========= */
+/* ========= WIKI IMAGE ========= */
 async function fetchWikiImage(title) {
   try {
     const s = await fetch(
@@ -144,6 +132,48 @@ function KofiButton() {
   );
 }
 
+/* ========= CARD ========= */
+function Card({ poi }) {
+  const name = poi.name ?? poi.title ?? "Site";
+  const era = poi.era ?? poi.century ?? "";
+  const summary = poi.summary ?? poi.description ?? "";
+  const [img, setImg] = useState(null);
+
+  useEffect(() => {
+    fetchWikiImage(name).then(setImg);
+  }, [name]);
+
+  return (
+    <div
+      style={{
+        background: "#FBF7E6",
+        border: "1px solid #E2D6B8",
+        borderRadius: 12,
+        overflow: "hidden",
+        marginBottom: 14,
+      }}
+    >
+      {img && (
+        <img
+          src={img}
+          alt={name}
+          style={{ width: "100%", height: 180, objectFit: "cover" }}
+        />
+      )}
+
+      <div style={{ padding: 14 }}>
+        <div style={{ fontWeight: 700, marginBottom: 4 }}>{name}</div>
+        {era && (
+          <div style={{ fontSize: 12, color: "#7a6f4a", marginBottom: 6 }}>
+            {era}
+          </div>
+        )}
+        {summary && <div style={{ fontSize: 14 }}>{summary}</div>}
+      </div>
+    </div>
+  );
+}
+
 /* ========= APP ========= */
 export default function App() {
   const [start, setStart] = useState("");
@@ -179,28 +209,34 @@ export default function App() {
       const B = await geocode(end);
       const coords = await route(A, B);
 
-      const near = ALL_POIS.map((p) => {
+      const candidates = [];
+
+      ALL_POIS.forEach((p) => {
         const lat = p.lat ?? p.latitude;
         const lon = p.lon ?? p.longitude;
-        if (!lat || !lon) return null;
+        if (!lat || !lon) return;
 
-        const dist = minDistanceToRoute({ lat, lon }, coords);
-        if (dist > 25) return null;
+        const { distance, index } = minDistanceToRoute(
+          { lat, lon },
+          coords
+        );
 
-        return {
-          ...p,
-          lat,
-          lon,
-          pos: routePosition({ lat, lon }, coords),
-        };
-      })
-        .filter(Boolean)
-        .sort((a, b) => a.pos - b.pos);
+        if (distance <= 25) {
+          candidates.push({
+            ...p,
+            lat,
+            lon,
+            routeIndex: index,
+          });
+        }
+      });
+
+      candidates.sort((a, b) => a.routeIndex - b.routeIndex);
 
       const routeKm = haversineKm(A, B);
       const initial = routeKm < 100 ? 4 : 8;
 
-      setPois(near);
+      setPois(candidates);
       setVisibleCount(initial);
     } catch (e) {
       alert(e.message);
@@ -214,7 +250,7 @@ export default function App() {
   return (
     <div
       style={{
-        background: "#efe8d2",
+        background: "#F4ECD8",
         minHeight: "100vh",
         fontFamily: "system-ui",
       }}
@@ -246,15 +282,9 @@ export default function App() {
 
         {loading && <p>Finding places…</p>}
 
-        {shown.map((p, i) => {
-          const name = p.name ?? p.title ?? "Site";
-          const era = p.era ?? p.century ?? "";
-          const summary = p.summary ?? p.description ?? "";
-
-          return (
-            <Card key={i} name={name} era={era} summary={summary} />
-          );
-        })}
+        {shown.map((p, i) => (
+          <Card key={i} poi={p} />
+        ))}
 
         {visibleCount < pois.length && (
           <button
@@ -263,8 +293,8 @@ export default function App() {
               width: "100%",
               marginTop: 12,
               padding: 12,
-              background: "#e7d9a8",
-              border: "1px solid #c8b98a",
+              background: "#E7D9A8",
+              border: "1px solid #C8B98A",
               borderRadius: 8,
             }}
           >
@@ -277,7 +307,7 @@ export default function App() {
             style={{
               marginTop: 20,
               padding: 14,
-              background: "#e7d9a8",
+              background: "#E7D9A8",
               borderRadius: 10,
             }}
           >
@@ -288,6 +318,7 @@ export default function App() {
                   start
                 )}/${encodeURIComponent(end)}`}
                 target="_blank"
+                rel="noreferrer"
               >
                 Open route →
               </a>
@@ -297,45 +328,6 @@ export default function App() {
       </div>
 
       <KofiButton />
-    </div>
-  );
-}
-
-/* ========= CARD ========= */
-function Card({ name, era, summary }) {
-  const [img, setImg] = useState(null);
-
-  useState(() => {
-    fetchWikiImage(name).then(setImg);
-  }, []);
-
-  return (
-    <div
-      style={{
-        background: "#fff",
-        borderRadius: 12,
-        overflow: "hidden",
-        marginBottom: 14,
-        boxShadow: "0 2px 6px rgba(0,0,0,0.1)",
-      }}
-    >
-      {img && (
-        <img
-          src={img}
-          alt={name}
-          style={{ width: "100%", height: 160, objectFit: "cover" }}
-        />
-      )}
-
-      <div style={{ padding: 14 }}>
-        <div style={{ fontWeight: 700 }}>{name}</div>
-        {era && (
-          <div style={{ fontSize: 12, color: "#7a6f4a", marginBottom: 6 }}>
-            {era}
-          </div>
-        )}
-        {summary && <div style={{ fontSize: 14 }}>{summary}</div>}
-      </div>
     </div>
   );
 }
