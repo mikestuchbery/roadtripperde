@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, memo } from "react";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
@@ -49,7 +49,7 @@ const ALL_POIS = [
   ...asArray(thuringia),
 ];
 
-/* ========= GEO & API HELPERS ========= */
+/* ========= GEO HELPERS ========= */
 function haversineKm(a, b) {
   const R = 6371;
   const dLat = ((b.lat - a.lat) * Math.PI) / 180;
@@ -62,7 +62,8 @@ function haversineKm(a, b) {
 
 function minDistanceToRoute(poi, coords) {
   let min = Infinity, idx = 0;
-  const step = coords.length > 1000 ? 3 : 1; 
+  // Performance optimization: downsample route for distance check
+  const step = coords.length > 1000 ? 4 : 1; 
   for (let i = 0; i < coords.length; i += step) {
     const d = haversineKm({ lat: poi.lat, lon: poi.lon }, { lat: coords[i][1], lon: coords[i][0] });
     if (d < min) { min = d; idx = i; }
@@ -76,7 +77,7 @@ async function fetchWikiImage(title) {
     const sj = await s.json();
     const page = sj.query.search[0];
     if (!page) return null;
-    const p = await fetch(`https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(page.title)}&prop=pageimages&pithumbsize=800&format=json&origin=*`);
+    const p = await fetch(`https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(page.title)}&prop=pageimages&pithumbsize=600&format=json&origin=*`);
     const pj = await p.json();
     const pg = Object.values(pj.query.pages)[0];
     return pg.thumbnail?.source || null;
@@ -84,32 +85,30 @@ async function fetchWikiImage(title) {
 }
 
 /* ========= COMPONENTS ========= */
-function DrivingScene() {
-  return (
-    <div className="scene" aria-hidden="true">
-      <div className="scene-sky"><div className="scene-sun" /></div>
-      <div className="scene-hill scene-hill--far" /><div className="scene-hill scene-hill--near" />
-      <div className="scene-treeline">
-        {[...Array(10)].map((_, i) => (
-          <div key={i} className="scene-tree" style={{ animationDelay: `${(i * -0.9).toFixed(1)}s` }}>
-            <div className="scene-trunk" /><div className="scene-canopy" />
-          </div>
-        ))}
-      </div>
-      <div className="scene-road">
-        {[...Array(7)].map((_, i) => <div key={i} className="scene-dash" style={{ animationDelay: `${(i * -0.45).toFixed(2)}s` }} />)}
-      </div>
-      <div className="scene-car">
-        <div className="scene-car-body">
-          <div className="scene-car-roof" /><div className="scene-win scene-win--rear" /><div className="scene-win scene-win--front" /><div className="scene-headlight" />
+const DrivingScene = memo(() => (
+  <div className="scene" aria-hidden="true">
+    <div className="scene-sky"><div className="scene-sun" /></div>
+    <div className="scene-hill scene-hill--far" /><div className="scene-hill scene-hill--near" />
+    <div className="scene-treeline">
+      {[...Array(10)].map((_, i) => (
+        <div key={i} className="scene-tree" style={{ animationDelay: `${(i * -0.9).toFixed(1)}s` }}>
+          <div className="scene-trunk" /><div className="scene-canopy" />
         </div>
-        <div className="scene-wheel scene-wheel--rear" /><div className="scene-wheel scene-wheel--front" />
-      </div>
+      ))}
     </div>
-  );
-}
+    <div className="scene-road">
+      {[...Array(7)].map((_, i) => <div key={i} className="scene-dash" style={{ animationDelay: `${(i * -0.45).toFixed(2)}s` }} />)}
+    </div>
+    <div className="scene-car">
+      <div className="scene-car-body">
+        <div className="scene-car-roof" /><div className="scene-win scene-win--rear" /><div className="scene-win scene-win--front" /><div className="scene-headlight" />
+      </div>
+      <div className="scene-wheel scene-wheel--rear" /><div className="scene-wheel scene-wheel--front" />
+    </div>
+  </div>
+));
 
-function Card({ poi, index }) {
+const Card = memo(({ poi, index }) => {
   const name = poi.name ?? poi.title ?? "Site";
   const [img, setImg] = useState(null);
   const [loaded, setLoaded] = useState(false);
@@ -134,24 +133,28 @@ function Card({ poi, index }) {
       </div>
     </div>
   );
-}
+});
 
-function JourneyMap({ routeCoords, stops, startName, endName }) {
+const JourneyMap = memo(({ routeCoords, stops, startName, endName }) => {
   if (!routeCoords?.length) return null;
   const mid = routeCoords[Math.floor(routeCoords.length / 2)];
   
-  // Google/Apple URL formats
-  const waypointStr = stops.slice(0, 10).map(p => `${p.lat},${p.lon}`).join("|");
-  const googleUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(startName)}&destination=${encodeURIComponent(endName)}&waypoints=${encodeURIComponent(waypointStr)}&travelmode=driving`;
-  const appleUrl = `https://maps.apple.com/?saddr=${encodeURIComponent(startName)}` + stops.slice(0, 10).map(p => `&daddr=${p.lat},${p.lon}`).join("") + `&daddr=${encodeURIComponent(endName)}&dirflg=d`;
+  const googleUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(startName)}&destination=${encodeURIComponent(endName)}&waypoints=${stops.slice(0, 8).map(p => `${p.lat},${p.lon}`).join('|')}&travelmode=driving`;
+  const appleUrl = `https://maps.apple.com/?saddr=${encodeURIComponent(startName)}` + stops.slice(0, 8).map(p => `&daddr=${p.lat},${p.lon}`).join("") + `&daddr=${encodeURIComponent(endName)}&dirflg=d`;
 
   return (
     <div className="map-card">
-      <div className="map-card-header"><span>Journey Map</span></div>
+      <div className="map-card-header"><span className="map-card-icon">◎</span><span>Journey map</span></div>
       <div className="map-viewport">
-        <MapContainer style={{ height: "100%", width: "100%" }} center={[mid[1], mid[0]]} zoom={6} scrollWheelZoom={false}>
+        <MapContainer 
+          style={{ height: "100%", width: "100%" }} 
+          center={[mid[1], mid[0]]} 
+          zoom={6} 
+          scrollWheelZoom={false}
+          preferCanvas={true} // Performance boost for route line
+        >
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-          <Polyline positions={routeCoords.map(c => [c[1], c[0]])} pathOptions={{ color: "#C04830", weight: 3, dashArray: "8 5" }} />
+          <Polyline positions={routeCoords.map(c => [c[1], c[0]])} pathOptions={{ color: "#C04830", weight: 3, opacity: 0.85, dashArray: "8 5" }} />
           {stops.map((p, i) => (
             <Marker key={i} position={[p.lat, p.lon]}><Popup>{p.name || p.title}</Popup></Marker>
           ))}
@@ -163,9 +166,9 @@ function JourneyMap({ routeCoords, stops, startName, endName }) {
       </div>
     </div>
   );
-}
+});
 
-/* ========= MAIN APP ========= */
+/* ========= APP ========= */
 export default function App() {
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
@@ -178,21 +181,20 @@ export default function App() {
 
   const geocode = async (place) => {
     const email = "michael.stuchbery@gmail.com";
-    const nominatim = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(place)}&limit=1&email=${encodeURIComponent(email)}`;
+    const nominatim = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(place)}&limit=1&email=${encodeURIComponent(email)}`; 
     const photon = `https://photon.komoot.io/api/?q=${encodeURIComponent(place)}&limit=1`;
 
     try {
       const r = await fetch(nominatim);
       const ct = r.headers.get("content-type");
-      if (!r.ok || !ct?.includes("json")) throw new Error("Nominatim busy");
+      if (!r.ok || !ct?.includes("json")) throw new Error("Busy");
       const j = await r.json();
       if (!j.length) throw new Error("Not found");
       return { lat: parseFloat(j[0].lat), lon: parseFloat(j[0].lon) };
     } catch {
-      // Fallback to Photon
       const r = await fetch(photon);
       const j = await r.json();
-      if (!j.features?.length) throw new Error(`Could not find: ${place}`);
+      if (!j.features?.length) throw new Error(`City not found: ${place}`);
       const [lon, lat] = j.features[0].geometry.coordinates;
       return { lat, lon };
     }
@@ -201,20 +203,16 @@ export default function App() {
   const findStops = async () => {
     if (!start || !end || loading) return;
     setLoading(true); setSearched(true); setPois([]); setCoords([]);
-    
     try {
       setLoadingStage("Locating cities...");
       const A = await geocode(start);
       const B = await geocode(end);
-      
       setLoadingStage("Charting your route...");
       const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${A.lon},${A.lat};${B.lon},${B.lat}?overview=full&geometries=geojson`);
       const data = await r.json();
       if (!data.routes?.length) throw new Error("No route found.");
-      
       const coords = data.routes[0].geometry.coordinates;
       setCoords(coords);
-
       setLoadingStage("Scanning for history...");
       const candidates = ALL_POIS.reduce((acc, p) => {
         const lat = p.lat ?? p.latitude;
@@ -224,12 +222,9 @@ export default function App() {
         if (distance <= 25) acc.push({ ...p, lat, lon, routeIndex: index });
         return acc;
       }, []).sort((a, b) => a.routeIndex - b.routeIndex);
-
       setPois(candidates);
       setVisible(8);
-    } catch (e) {
-      alert(e.message);
-    } finally {
+    } catch (e) { alert(e.message); } finally {
       setLoading(false);
       setLoadingStage("");
     }
@@ -263,28 +258,28 @@ export default function App() {
         .search-inputs { display: flex; flex-direction: column; margin-bottom: 14px; border-radius: 10px; overflow: hidden; border: 1.5px solid #3A2A10; }
         .search-input { flex: 1; padding: 15px; background: #261C0C; border: none; border-bottom: 1px solid #3A2A10; font-size: 16px; color: #F0E4C8; outline: none; }
         .search-btn { width: 100%; padding: 16px; border: none; border-radius: 10px; background: #C04830; color: #FFF; font-weight: 500; cursor: pointer; }
-        .search-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-        .overlay { position: fixed; inset: 0; background: rgba(28, 18, 8, 0.95); z-index: 10000; display: flex; flex-direction: column; align-items: center; justifyContent: center; color: #F5EDDA; }
+        .overlay { position: fixed; inset: 0; background: rgba(28, 18, 8, 0.95); z-index: 10000; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #F5EDDA; }
         .overlay-text { font-family: 'Lora', serif; font-style: italic; margin-top: 20px; font-size: 18px; }
         .content { padding: 24px 16px; }
+        .welcome { background: #FAF4E4; border-radius: 14px; padding: 24px 20px; margin-bottom: 16px; box-shadow: 0 2px 12px rgba(30,16,4,.08); }
         .card { background: #FAF4E4; border-radius: 14px; overflow: hidden; margin-bottom: 16px; box-shadow: 0 2px 12px rgba(30,16,4,.1); }
         .card-hero { height: 220px; position: relative; overflow: hidden; }
         .card-hero-img { width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .5s; }
         .card-hero-img--in { opacity: 1; }
-        .card-body { padding: 16px; }
+        .card-hero-num { position: absolute; top: 12px; left: 12px; width: 30px; height: 30px; border-radius: 50%; background: rgba(20,10,2,.7); color: #F0DCA8; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 500; }
+        .card-noimg-num { width: 32px; height: 32px; border-radius: 50%; background: #1C1208; color: #F0DCA8; display: flex; align-items: center; justify-content: center; margin: 16px; font-size: 12px; }
         .pill { background: #EEE0BA; padding: 3px 8px; font-size: 9px; border-radius: 4px; text-transform: uppercase; margin-right: 5px; }
         .card-title { font-family: 'Playfair Display', serif; font-size: 22px; margin: 8px 0; }
         .card-link { color: #C04830; text-decoration: none; font-weight: 500; }
-        .map-card { background: #FAF4E4; border-radius: 14px; overflow: hidden; margin-top: 20px; }
-        .map-viewport { height: 280px; }
-        .maps-btn { display: block; text-align: center; padding: 12px; border-radius: 8px; text-decoration: none; margin: 8px 16px; font-weight: 500; }
-        .maps-btn--google { background: #C04830; color: #FFF; }
-        .maps-btn--apple { background: #2E2010; color: #D4B870; }
+        .footer { padding: 32px 16px 80px; text-align: center; }
+        .footer-love { font-family: 'Lora', serif; font-style: italic; font-size: 15px; color: #7A6035; margin-bottom: 8px; }
+        .kofi { position: fixed; right: 16px; bottom: 24px; height: 44px; padding: 0 16px; border-radius: 22px; background: #FAF0C8; border: 1.5px solid #D4B860; display: flex; align-items: center; gap: 7px; text-decoration: none; box-shadow: 0 4px 20px rgba(0,0,0,0.2); z-index: 9999; }
+        .kofi-label { font-size: 12px; font-weight: 500; color: #5A3C10; }
       `}</style>
 
       {loading && (
         <div className="overlay">
-          <div className="scene-car"><div className="scene-car-body"></div></div>
+          <DrivingScene />
           <p className="overlay-text">{loadingStage}</p>
         </div>
       )}
@@ -307,13 +302,39 @@ export default function App() {
         </div>
 
         <div className="content">
-          {!loading && shown.map((p, i) => <Card key={i} poi={p} index={i} />)}
-          {visibleCount < pois.length && (
-            <button className="search-btn" style={{ background: 'transparent', color: '#C04830', border: '1px solid #C04830' }} onClick={() => setVisible(v => v + 6)}>Load More</button>
+          {!hasSearched && !loading && (
+            <div className="welcome">
+              <h2 style={{ fontFamily: 'Playfair Display', marginBottom: '16px' }}>How it works</h2>
+              <p style={{ fontSize: '14px', color: '#5A4228', marginBottom: '12px' }}>Enter start and destination in Germany to discover historic sites within 25km of your path.</p>
+              <div style={{ height: '1px', background: '#D4B860', margin: '16px 0' }} />
+              <p className="footer-love">A labour of love by <strong>Mike Stuchbery</strong></p>
+              <p className="footer-love" style={{ fontSize: '13px', color: '#C04830' }}>michael.stuchbery@gmail.com</p>
+              <p style={{ fontSize: '11px', color: '#A89060', textAlign: 'center' }}>© 2006 Mike Stuchbery</p>
+            </div>
           )}
-          {pois.length > 0 && <JourneyMap routeCoords={routeCoords} stops={shown} startName={start} endName={end} />}
+          
+          {!loading && shown.map((p, i) => <Card key={i} poi={p} index={i} />)}
+          
+          {visibleCount < pois.length && (
+            <button className="search-btn" style={{ background: 'transparent', color: '#C04830', border: '1px solid #C04830' }} onClick={() => setVisible(v => v + 6)}>Load More Stops</button>
+          )}
+
+          {shown.length > 0 && (
+            <>
+              <JourneyMap routeCoords={routeCoords} stops={shown} startName={start} endName={end} />
+              <footer className="footer">
+                <p className="footer-love">A labour of love by <strong>Mike Stuchbery</strong></p>
+                <p className="footer-love" style={{ fontSize: '13px', color: '#C04830' }}>michael.stuchbery@gmail.com</p>
+                <p style={{ fontSize: '11px', color: '#A89060' }}>© 2006 Mike Stuchbery</p>
+              </footer>
+            </>
+          )}
         </div>
       </div>
+
+      <a href="https://ko-fi.com/mikestuchbery" target="_blank" rel="noopener noreferrer" className="kofi">
+        ☕ <span className="kofi-label">Buy a coffee</span>
+      </a>
     </>
   );
 }
