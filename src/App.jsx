@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
@@ -14,7 +14,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: markerShadow,
 });
 
-/* ========= POI DATA IMPORTS ========= */
+/* ========= IMPORT POIS ========= */
 import baden from "./data/baden-wuerttemberg-pois.json";
 import bavaria from "./data/bavaria-pois.json";
 import berlin from "./data/berlin-pois.json";
@@ -62,7 +62,7 @@ function haversineKm(a, b) {
 
 function minDistanceToRoute(poi, coords) {
   let min = Infinity, idx = 0;
-  const step = coords.length > 800 ? 2 : 1;
+  const step = coords.length > 1000 ? 3 : 1; 
   for (let i = 0; i < coords.length; i += step) {
     const d = haversineKm({ lat: poi.lat, lon: poi.lon }, { lat: coords[i][1], lon: coords[i][0] });
     if (d < min) { min = d; idx = i; }
@@ -76,7 +76,7 @@ async function fetchWikiImage(title) {
     const sj = await s.json();
     const page = sj.query.search[0];
     if (!page) return null;
-    const p = await fetch(`https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(page.title)}&prop=pageimages&pithumbsize=900&format=json&origin=*`);
+    const p = await fetch(`https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(page.title)}&prop=pageimages&pithumbsize=800&format=json&origin=*`);
     const pj = await p.json();
     const pg = Object.values(pj.query.pages)[0];
     return pg.thumbnail?.source || null;
@@ -114,6 +114,7 @@ function Card({ poi, index }) {
   const [img, setImg] = useState(null);
   const [loaded, setLoaded] = useState(false);
   useEffect(() => { fetchWikiImage(name).then(setImg); }, [name]);
+
   return (
     <div className="card" style={{ animationDelay: `${index * 0.06}s` }}>
       {img ? (
@@ -138,9 +139,11 @@ function Card({ poi, index }) {
 function JourneyMap({ routeCoords, stops, startName, endName }) {
   if (!routeCoords?.length) return null;
   const mid = routeCoords[Math.floor(routeCoords.length / 2)];
-  const waypointStr = stops.map(p => `${p.lat},${p.lon}`).join("|");
+  
+  // Google/Apple URL formats
+  const waypointStr = stops.slice(0, 10).map(p => `${p.lat},${p.lon}`).join("|");
   const googleUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(startName)}&destination=${encodeURIComponent(endName)}&waypoints=${encodeURIComponent(waypointStr)}&travelmode=driving`;
-  const appleUrl = `https://maps.apple.com/?saddr=${encodeURIComponent(startName)}` + stops.map(p => `&daddr=${p.lat},${p.lon}`).join("") + `&daddr=${encodeURIComponent(endName)}&dirflg=d`;
+  const appleUrl = `https://maps.apple.com/?saddr=${encodeURIComponent(startName)}` + stops.slice(0, 10).map(p => `&daddr=${p.lat},${p.lon}`).join("") + `&daddr=${encodeURIComponent(endName)}&dirflg=d`;
 
   return (
     <div className="map-card">
@@ -162,7 +165,7 @@ function JourneyMap({ routeCoords, stops, startName, endName }) {
   );
 }
 
-/* ========= APP ========= */
+/* ========= MAIN APP ========= */
 export default function App() {
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
@@ -170,31 +173,49 @@ export default function App() {
   const [routeCoords, setCoords] = useState([]);
   const [visibleCount, setVisible] = useState(8);
   const [loading, setLoading] = useState(false);
+  const [loadingStage, setLoadingStage] = useState("");
   const [hasSearched, setSearched] = useState(false);
 
   const geocode = async (place) => {
-    // Identity provided via email parameter per OSM policy
-    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(place)}&email=michael.stuchbery@gmail.com&limit=1`;
-    const r = await fetch(url);
-    if (!r.ok) throw new Error("Geocoding service unavailable.");
-    const j = await r.json();
-    if (!j.length) throw new Error(`Could not find: ${place}`);
-    return { lat: parseFloat(j[0].lat), lon: parseFloat(j[0].lon) };
+    const email = "michael.stuchbery@gmail.com";
+    const nominatim = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(place)}&limit=1&email=${encodeURIComponent(email)}`;
+    const photon = `https://photon.komoot.io/api/?q=${encodeURIComponent(place)}&limit=1`;
+
+    try {
+      const r = await fetch(nominatim);
+      const ct = r.headers.get("content-type");
+      if (!r.ok || !ct?.includes("json")) throw new Error("Nominatim busy");
+      const j = await r.json();
+      if (!j.length) throw new Error("Not found");
+      return { lat: parseFloat(j[0].lat), lon: parseFloat(j[0].lon) };
+    } catch {
+      // Fallback to Photon
+      const r = await fetch(photon);
+      const j = await r.json();
+      if (!j.features?.length) throw new Error(`Could not find: ${place}`);
+      const [lon, lat] = j.features[0].geometry.coordinates;
+      return { lat, lon };
+    }
   };
 
   const findStops = async () => {
-    if (!start || !end) return;
-    setLoading(true); setSearched(true); setPois([]);
+    if (!start || !end || loading) return;
+    setLoading(true); setSearched(true); setPois([]); setCoords([]);
+    
     try {
+      setLoadingStage("Locating cities...");
       const A = await geocode(start);
       const B = await geocode(end);
+      
+      setLoadingStage("Charting your route...");
       const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${A.lon},${A.lat};${B.lon},${B.lat}?overview=full&geometries=geojson`);
       const data = await r.json();
-      if (!data.routes?.length) throw new Error("No driving route found.");
+      if (!data.routes?.length) throw new Error("No route found.");
       
       const coords = data.routes[0].geometry.coordinates;
       setCoords(coords);
 
+      setLoadingStage("Scanning for history...");
       const candidates = ALL_POIS.reduce((acc, p) => {
         const lat = p.lat ?? p.latitude;
         const lon = p.lon ?? p.longitude;
@@ -210,8 +231,11 @@ export default function App() {
       alert(e.message);
     } finally {
       setLoading(false);
+      setLoadingStage("");
     }
   };
+
+  const shown = useMemo(() => pois.slice(0, visibleCount), [pois, visibleCount]);
 
   return (
     <>
@@ -239,6 +263,9 @@ export default function App() {
         .search-inputs { display: flex; flex-direction: column; margin-bottom: 14px; border-radius: 10px; overflow: hidden; border: 1.5px solid #3A2A10; }
         .search-input { flex: 1; padding: 15px; background: #261C0C; border: none; border-bottom: 1px solid #3A2A10; font-size: 16px; color: #F0E4C8; outline: none; }
         .search-btn { width: 100%; padding: 16px; border: none; border-radius: 10px; background: #C04830; color: #FFF; font-weight: 500; cursor: pointer; }
+        .search-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .overlay { position: fixed; inset: 0; background: rgba(28, 18, 8, 0.95); z-index: 10000; display: flex; flex-direction: column; align-items: center; justifyContent: center; color: #F5EDDA; }
+        .overlay-text { font-family: 'Lora', serif; font-style: italic; margin-top: 20px; font-size: 18px; }
         .content { padding: 24px 16px; }
         .card { background: #FAF4E4; border-radius: 14px; overflow: hidden; margin-bottom: 16px; box-shadow: 0 2px 12px rgba(30,16,4,.1); }
         .card-hero { height: 220px; position: relative; overflow: hidden; }
@@ -255,6 +282,13 @@ export default function App() {
         .maps-btn--apple { background: #2E2010; color: #D4B870; }
       `}</style>
 
+      {loading && (
+        <div className="overlay">
+          <div className="scene-car"><div className="scene-car-body"></div></div>
+          <p className="overlay-text">{loadingStage}</p>
+        </div>
+      )}
+
       <div className="page">
         <div className="hero">
           <h1 className="hero-title">Road<em>tripper</em></h1>
@@ -264,21 +298,20 @@ export default function App() {
 
         <div className="search-panel">
           <div className="search-inputs">
-            <input className="search-input" placeholder="Start city" value={start} onChange={e => setStart(e.target.value)} onKeyDown={e => e.key === "Enter" && findStops()} />
-            <input className="search-input" placeholder="Destination" value={end} onChange={e => setEnd(e.target.value)} onKeyDown={e => e.key === "Enter" && findStops()} />
+            <input className="search-input" placeholder="Start city" value={start} onChange={e => setStart(e.target.value)} />
+            <input className="search-input" placeholder="Destination" value={end} onChange={e => setEnd(e.target.value)} />
           </div>
           <button className="search-btn" onClick={findStops} disabled={loading}>
-            {loading ? "Charting route..." : "Explore Route"}
+            {loading ? "Searching..." : "Explore Route"}
           </button>
         </div>
 
         <div className="content">
-          {loading && <p style={{ textAlign: 'center', color: '#8A7040' }}>Loading stops...</p>}
-          {!loading && pois.slice(0, visibleCount).map((p, i) => <Card key={i} poi={p} index={i} />)}
+          {!loading && shown.map((p, i) => <Card key={i} poi={p} index={i} />)}
           {visibleCount < pois.length && (
             <button className="search-btn" style={{ background: 'transparent', color: '#C04830', border: '1px solid #C04830' }} onClick={() => setVisible(v => v + 6)}>Load More</button>
           )}
-          {pois.length > 0 && <JourneyMap routeCoords={routeCoords} stops={pois.slice(0, visibleCount)} startName={start} endName={end} />}
+          {pois.length > 0 && <JourneyMap routeCoords={routeCoords} stops={shown} startName={start} endName={end} />}
         </div>
       </div>
     </>
