@@ -31,23 +31,28 @@ import saxonyAnhalt from "./data/saxony-anhalt-pois.json";
 import sh from "./data/schleswig-holstein-pois.json";
 import thuringia from "./data/thuringia-pois.json";
 
+/* ========= FAIL-SAFE DATA PARSING ========= */
 function asArray(x) {
-  if (!x) return [];
-  if (Array.isArray(x)) return x;
-  if (Array.isArray(x.pois)) return x.pois;
-  if (Array.isArray(x.data)) return x.data;
-  if (x.name) return [x];
-  return [];
+  try {
+    if (!x) return [];
+    // Handle module default wrapping or direct array
+    const data = x.default ? x.default : x;
+    if (Array.isArray(data)) return data;
+    if (data.pois && Array.isArray(data.pois)) return data.pois;
+    if (data.data && Array.isArray(data.data)) return data.data;
+    if (data.name || data.title) return [data];
+    return [];
+  } catch (e) {
+    console.error("POI segment failed to parse:", e);
+    return [];
+  }
 }
 
 const ALL_POIS = [
-  ...asArray(baden), ...asArray(bavaria), ...asArray(berlin),
-  ...asArray(brandenburg), ...asArray(bremen), ...asArray(hamburg),
-  ...asArray(hesse), ...asArray(lowerSaxony), ...asArray(meckpom),
-  ...asArray(nrw), ...asArray(rlp), ...asArray(saarland),
-  ...asArray(saxony), ...asArray(saxonyAnhalt), ...asArray(sh),
-  ...asArray(thuringia),
-];
+  baden, bavaria, berlin, brandenburg, bremen, hamburg,
+  hesse, lowerSaxony, meckpom, nrw, rlp, saarland,
+  saxony, saxonyAnhalt, sh, thuringia
+].flatMap(asArray);
 
 /* ========= GEO ========= */
 function haversineKm(a, b) {
@@ -61,7 +66,6 @@ function haversineKm(a, b) {
 }
 
 function minDistanceToRoute(poi, coords) {
-  // poi must have numeric lat/lon — guard defensively
   if (poi.lat == null || poi.lon == null || isNaN(poi.lat) || isNaN(poi.lon)) {
     return { distance: Infinity, index: 0 };
   }
@@ -132,7 +136,7 @@ function DrivingScene() {
 /* ========= CARD ========= */
 function Card({ poi, index }) {
   const name    = poi.name ?? poi.title ?? "Site";
-  const era     = poi.era ?? poi.century ?? "";
+  const era      = poi.era ?? poi.century ?? "";
   const type    = poi.type ?? poi.category ?? "";
   const summary = poi.summary ?? poi.description ?? "";
   const [img, setImg]       = useState(null);
@@ -176,14 +180,9 @@ function Card({ poi, index }) {
 function JourneyMap({ routeCoords, stops, startName, endName }) {
   if (!routeCoords?.length || !stops?.length) return null;
 
-  // Centre on the midpoint of the route
   const mid = routeCoords[Math.floor(routeCoords.length / 2)];
 
-  // Google Maps: start / waypoints / end
-  // Waypoints are the stops in between (all except start/end cities which are separate)
-  const waypointStr = stops
-    .map(p => `${p.lat},${p.lon}`)
-    .join("|");
+  const waypointStr = stops.map(p => `${p.lat},${p.lon}`).join("|");
   const googleUrl =
     `https://www.google.com/maps/dir/?api=1` +
     `&origin=${encodeURIComponent(startName)}` +
@@ -191,8 +190,6 @@ function JourneyMap({ routeCoords, stops, startName, endName }) {
     `&waypoints=${encodeURIComponent(waypointStr)}` +
     `&travelmode=driving`;
 
-  // Apple Maps: chain daddr with `+to:` for multi-stop
-  // Format: saddr -> first stop -> ... -> endName
   const allPoints = [startName, ...stops.map(p => `${p.lat},${p.lon}`), endName];
   const appleUrl =
     `https://maps.apple.com/?saddr=${encodeURIComponent(allPoints[0])}` +
@@ -206,7 +203,6 @@ function JourneyMap({ routeCoords, stops, startName, endName }) {
         <span>Journey map</span>
       </div>
 
-      {/* Leaflet map — full bleed */}
       <div className="map-viewport">
         <MapContainer
           style={{ height: "100%", width: "100%" }}
@@ -219,12 +215,10 @@ function JourneyMap({ routeCoords, stops, startName, endName }) {
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             attribution=""
           />
-          {/* Route polyline */}
           <Polyline
             positions={routeCoords.map(c => [c[1], c[0]])}
             pathOptions={{ color: "#C04830", weight: 3, opacity: 0.85, dashArray: "8 5" }}
           />
-          {/* Stop markers with popup name */}
           {stops.map((p, i) => (
             <Marker key={i} position={[p.lat, p.lon]}>
               <Popup>{p.name ?? p.title ?? "Stop"}</Popup>
@@ -233,7 +227,6 @@ function JourneyMap({ routeCoords, stops, startName, endName }) {
         </MapContainer>
       </div>
 
-      {/* Map action buttons */}
       <div className="map-card-footer">
         <a href={googleUrl} target="_blank" rel="noreferrer" className="maps-btn maps-btn--google">
           Open in Google Maps →
@@ -259,13 +252,14 @@ export default function App() {
   async function geocode(place) {
     const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(place)}`);
     const j = await r.json();
+    if (!j.length) throw new Error("Location not found");
     return { lat: +j[0].lat, lon: +j[0].lon };
   }
 
   async function fetchRoute(a, b) {
     const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${a.lon},${a.lat};${b.lon},${b.lat}?overview=full&geometries=geojson`);
     const j = await r.json();
-    return j.routes[0].geometry.coordinates; // [lon, lat] pairs
+    return j.routes[0].geometry.coordinates;
   }
 
   async function findStops() {
@@ -279,11 +273,24 @@ export default function App() {
 
       const candidates = [];
       ALL_POIS.forEach(p => {
-        const lat = parseFloat(p.lat ?? p.latitude);
-        const lon = parseFloat(p.lon ?? p.longitude);
+        if (!p || typeof p !== 'object') return;
+        
+        // Handle attribute fallback for different JSON formats
+        const lat = parseFloat(p.lat ?? p.latitude ?? p.lat_deg);
+        const lon = parseFloat(p.lon ?? p.longitude ?? p.lon_deg);
+        
         if (!isFinite(lat) || !isFinite(lon)) return;
+        
         const { distance, index } = minDistanceToRoute({ lat, lon }, coords);
-        if (distance <= 25) candidates.push({ ...p, lat, lon, routeIndex: index });
+        if (distance <= 25) {
+            candidates.push({ 
+                ...p, 
+                lat, 
+                lon, 
+                routeIndex: index,
+                name: p.name ?? p.title ?? "Interesting Site" 
+            });
+        }
       });
 
       candidates.sort((a, b) => a.routeIndex - b.routeIndex);
@@ -486,7 +493,6 @@ export default function App() {
           height: 280px;
           width: 100%;
         }
-        /* Override Leaflet's default z-index so it doesn't escape the card */
         .map-viewport .leaflet-container { height: 100%; width: 100%; }
         .map-card-footer {
           padding: 14px 16px;
@@ -593,7 +599,6 @@ export default function App() {
       `}</style>
 
       <div className="page">
-        {/* ── DARK HERO ── */}
         <div className="hero">
           <p className="hero-eyebrow">Deutschland · Auf Entdeckungsreise</p>
           <h1 className="hero-title">Road<em>tripper</em></h1>
@@ -601,7 +606,6 @@ export default function App() {
           <DrivingScene />
         </div>
 
-        {/* ── SEARCH ── */}
         <div className="search-panel">
           <p className="search-label">Plan your journey</p>
           <div className="search-inputs">
@@ -623,10 +627,7 @@ export default function App() {
           </button>
         </div>
 
-        {/* ── RESULTS ── */}
         <div className="content">
-
-          {/* Welcome panel — only shown before first search */}
           {!hasSearched && !loading && (
             <div className="welcome">
               <div className="welcome-icon">🗺️</div>
@@ -673,7 +674,6 @@ export default function App() {
                 </button>
               )}
 
-              {/* Visible map + native app links */}
               <JourneyMap
                 routeCoords={routeCoords}
                 stops={shown}
@@ -693,7 +693,7 @@ export default function App() {
               </a>
               <p className="footer-copy">© 2006 Mike Stuchbery</p>
               <p className="footer-data">
-                Routes · OSRM &nbsp;·&nbsp; Places · OpenStreetMap &nbsp;·&nbsp; Images · Wikipedia
+                Routes · OSRM  ·  Places · OpenStreetMap  ·  Images · Wikipedia
               </p>
             </footer>
           )}
