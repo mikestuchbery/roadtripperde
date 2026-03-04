@@ -362,6 +362,10 @@ export default function App() {
           from { opacity: 0; transform: translateY(14px); }
           to   { opacity: 1; transform: translateY(0); }
         }
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to   { opacity: 1; }
+        }
 
         .hero { background: #1C1208; padding: 52px 20px 0; position: relative; overflow: hidden; text-align: center; }
         .hero::after { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse 80% 60% at 50% 120%, rgba(212,160,80,0.10) 0%, transparent 70%); pointer-events: none; }
@@ -396,7 +400,7 @@ export default function App() {
           font-size: 11px; color: rgba(212,160,80,0.55);
           text-align: center; line-height: 1.4;
         }
-        .search-panel { background: #1C1208; padding: 20px 20px 28px; animation: fadeUp 0.5s var(--eq) both 0.36s; }
+        .search-panel { background: #1C1208; padding: 20px 20px 28px; animation: fadeIn 0.35s ease both 0.08s; }
         .search-inputs { display: flex; flex-direction: column; margin-bottom: 14px; border-radius: 10px; overflow: hidden; border: 1.5px solid #3A2A10; transition: border-color 0.2s; }
         .search-inputs:focus-within { border-color: #D4A050; }
         .search-input { flex: 1; padding: 15px; background: #261C0C; border: none; border-bottom: 1px solid #3A2A10; font-size: 16px; color: #F0E4C8; outline: none; font-family: 'DM Sans', sans-serif; transition: background 0.18s; }
