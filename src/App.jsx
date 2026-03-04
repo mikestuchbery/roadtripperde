@@ -353,6 +353,8 @@ export default function App() {
   return (
     <>
       <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&display=swap');
+
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'DM Sans', sans-serif; background: #E8DEC6; min-height: 100dvh; }
 
@@ -369,8 +371,20 @@ export default function App() {
 
         .hero { background: #1C1208; padding: 52px 20px 0; position: relative; overflow: hidden; text-align: center; }
         .hero::after { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse 80% 60% at 50% 120%, rgba(212,160,80,0.10) 0%, transparent 70%); pointer-events: none; }
-        .hero-title { font-family: 'Playfair Display', serif; font-size: clamp(48px, 13vw, 72px); color: #F5EDDA; line-height: .95; animation: fadeUp 0.5s var(--eq) both 0.05s; }
-        .hero-title em { font-style: italic; color: #D4A050; }
+        .hero-title {
+          font-family: 'Cinzel', serif;
+          font-size: clamp(42px, 11vw, 66px);
+          letter-spacing: 0.07em;
+          text-transform: uppercase;
+          color: #F5EDDA;
+          line-height: 1;
+          animation: fadeUp 0.5s var(--eq) both 0.05s;
+        }
+        .hero-title em {
+          font-style: normal;
+          color: #D4A050;
+          letter-spacing: 0.09em;
+        }
         .hero-sub { font-family: 'Lora', serif; font-style: italic; color: #A89060; font-size: 15px; margin-top: 10px; animation: fadeUp 0.5s var(--eq) both 0.18s; }
         /* ── HeroSteps ── */
         .hero-steps {
@@ -484,9 +498,9 @@ export default function App() {
           font-size: 13px; color: #7A6035; line-height: 1.6; max-width: 280px; margin: 0 auto;
         }
         .content { padding: 24px 16px; }
-        .welcome { background: #FAF4E4; border-radius: 14px; padding: 24px 20px; margin-bottom: 16px; box-shadow: 0 2px 12px rgba(30,16,4,.08); }
-        .welcome-steps { list-style: none; }
-        .welcome-steps li { display: flex; align-items: flex-start; gap: 12px; font-size: 14px; margin-bottom: 12px; color: #5A4228; }
+        .welcome { background: #FAF4E4; border-radius: 14px; padding: 24px 20px; margin-bottom: 16px; box-shadow: 0 2px 12px rgba(30,16,4,.08); text-align: center; }
+        .welcome-steps { list-style: none; max-width: 520px; margin: 0 auto; }
+        .welcome-steps li { font-size: 14px; margin-bottom: 12px; color: #5A4228; text-align: center; }
         .card {
           background: #FAF4E4; border-radius: 14px; overflow: hidden; margin-bottom: 16px;
           box-shadow: 0 2px 12px rgba(30,16,4,.1);
@@ -537,7 +551,7 @@ export default function App() {
 
       <div className="page">
         <div className="hero">
-          <h1 className="hero-title">Road<em>tripper</em></h1>
+          <h1 className="hero-title">Roadtripper<em>DE</em></h1>
           <p className="hero-sub">History &amp; heritage along your route</p>
           <HeroSteps />
         </div>
