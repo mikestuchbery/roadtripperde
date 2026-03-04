@@ -147,7 +147,6 @@ function HeroSteps() {
 function LoadingOverlay({ stage }) {
   const stages = ["Locating cities...", "Charting your route...", "Scanning for history..."];
   const stageIndex = stages.indexOf(stage);
-  // Deterministic dot positions so no hydration jitter
   const dots = [
     { cx: 18, cy: 40 }, { cx: 50, cy: 26 }, { cx: 82, cy: 38 },
     { cx: 62, cy: 56 }, { cx: 34, cy: 60 }, { cx: 72, cy: 68 },
@@ -157,21 +156,18 @@ function LoadingOverlay({ stage }) {
       <div className="lo-backdrop" />
       <div className="lo-box">
         <svg className="lo-map" viewBox="0 0 100 90" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-          {/* road segments between dots */}
           {dots.slice(0, -1).map((d, i) => (
             <line key={i}
               x1={d.cx} y1={d.cy} x2={dots[i+1].cx} y2={dots[i+1].cy}
               stroke="rgba(212,160,80,0.18)" strokeWidth="1.5" strokeDasharray="3 3"
             />
           ))}
-          {/* animated travelling line */}
           <polyline
             points={dots.map(d => `${d.cx},${d.cy}`).join(' ')}
             fill="none" stroke="#D4A050" strokeWidth="1.5"
             strokeDasharray="200" strokeDashoffset="200"
             className="lo-route-line"
           />
-          {/* waypoint circles */}
           {dots.map((d, i) => (
             <circle key={i} cx={d.cx} cy={d.cy} r="4.5"
               fill="#1C1208" stroke="#D4A050" strokeWidth="1.5"
@@ -179,9 +175,7 @@ function LoadingOverlay({ stage }) {
               style={{ animationDelay: `${i * 0.18}s` }}
             />
           ))}
-          {/* start pin */}
           <circle cx={dots[0].cx} cy={dots[0].cy} r="6" fill="#D4A050" opacity="0.9" />
-          {/* end pin */}
           <circle cx={dots[dots.length-1].cx} cy={dots[dots.length-1].cy} r="6" fill="#C04830" opacity="0.9" />
         </svg>
         <p className="lo-stage">{stage || "Finding your route…"}</p>
@@ -422,14 +416,12 @@ export default function App() {
           animation: fadeUp 0.3s var(--eq) both;
         }
         .lo-map { width: 100%; height: auto; margin-bottom: 16px; display: block; }
-        /* travelling route line */
         .lo-route-line { animation: lo-draw 2.4s ease-in-out infinite; }
         @keyframes lo-draw {
           0%   { stroke-dashoffset: 200; opacity: 0.4; }
           50%  { stroke-dashoffset: 0;   opacity: 1; }
           100% { stroke-dashoffset: -200; opacity: 0.4; }
         }
-        /* waypoint circle pulse */
         .lo-dot-circle { animation: lo-dot-pulse 1.4s ease-in-out infinite alternate; }
         @keyframes lo-dot-pulse {
           from { r: 3.5; opacity: 0.5; }
@@ -494,6 +486,26 @@ export default function App() {
         }
         .welcome-steps { list-style: none; }
         .welcome-steps li { display: flex; align-items: flex-start; gap: 12px; font-size: 14px; margin-bottom: 12px; color: #5A4228; }
+
+        .welcome-question {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .welcome-icon {
+          font-size: 28px;
+        }
+
+        .welcome-title {
+          font-family: 'Playfair Display', serif;
+          font-size: 22px;
+          line-height: 1.2;
+          color: #3A2A10;
+          text-align: center;
+        }
+
         .card {
           background: #FAF4E4; border-radius: 14px; overflow: hidden; margin-bottom: 16px;
           box-shadow: 0 2px 12px rgba(30,16,4,.1);
@@ -562,13 +574,11 @@ export default function App() {
         <div className="content">
           {!hasSearched && !loading && (
             <div className="welcome">
-              <h2 style={{ fontFamily: "'Playfair Display', serif", marginBottom: '16px' }}>How it works</h2>
-              <ul className="welcome-steps">
-                <li>Enter start and destination in Germany.</li>
-                <li>Discover historic sites within 25km of your path.</li>
-                <li>Read entries or navigate via Google/Apple Maps.</li>
-              </ul>
-              <div style={{ height: '1px', background: '#D4B860', margin: '16px 0' }} />
+              <div className="welcome-question">
+                <div className="welcome-icon" aria-hidden="true">🧭</div>
+                <h2 className="welcome-title">What do you want to discover today?</h2>
+              </div>
+              <div style={{ height: '1px', background: '#D4B860', margin: '18px 0' }} />
               <p className="footer-love">A labour of love by <strong>Mike Stuchbery</strong></p>
               <a href="mailto:michael.stuchbery@gmail.com" className="footer-email">michael.stuchbery@gmail.com</a>
               <p className="footer-copy">© 2026 Mike Stuchbery</p>
