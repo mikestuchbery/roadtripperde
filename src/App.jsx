@@ -215,7 +215,7 @@ function LoadingOverlay({ stage }) {
   );
 }
 
-function Card({ poi, index }) {
+function Card({ poi, index, animDelay }) {
   const name = poi.name ?? poi.title ?? "Site";
   const [img, setImg] = useState(null);
   const [wikiTitle, setWikiTitle] = useState(null);
@@ -231,7 +231,7 @@ function Card({ poi, index }) {
   const appleMapsUrl  = `https://maps.apple.com/?ll=${poi.lat},${poi.lon}&q=${encodeURIComponent(name)}&t=m`;
 
   return (
-    <div className="card" style={{ animationDelay: `${index * 0.06}s` }}>
+    <div className="card" style={{ animationDelay: `${(animDelay ?? index) * 0.06}s` }}>
       {img ? (
         <div className="card-hero">
           <img src={img} alt={name} className={`card-hero-img${loaded ? " card-hero-img--in" : ""}`} onLoad={() => setLoaded(true)} />
@@ -351,11 +351,20 @@ export default function App() {
       <style>{`
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'DM Sans', sans-serif; background: #E8DEC6; min-height: 100dvh; }
+
+        :root { --eq: cubic-bezier(0.25, 1, 0.5, 1); --ei: cubic-bezier(0.4, 0, 0.2, 1); }
+
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(14px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+
         .hero { background: #1C1208; padding: 52px 20px 0; position: relative; overflow: hidden; text-align: center; }
-        .hero-title { font-family: 'Playfair Display', serif; font-size: clamp(48px, 13vw, 72px); color: #F5EDDA; line-height: .95; }
+        .hero::after { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse 80% 60% at 50% 120%, rgba(212,160,80,0.10) 0%, transparent 70%); pointer-events: none; }
+        .hero-title { font-family: 'Playfair Display', serif; font-size: clamp(48px, 13vw, 72px); color: #F5EDDA; line-height: .95; animation: fadeUp 0.5s var(--eq) both 0.05s; }
         .hero-title em { font-style: italic; color: #D4A050; }
-        .hero-sub { font-family: 'Lora', serif; font-style: italic; color: #A89060; font-size: 15px; margin-top: 10px; }
-        .scene { position: relative; height: 100px; overflow: hidden; margin-top: 20px; }
+        .hero-sub { font-family: 'Lora', serif; font-style: italic; color: #A89060; font-size: 15px; margin-top: 10px; animation: fadeUp 0.5s var(--eq) both 0.18s; }
+        .scene { position: relative; height: 100px; overflow: hidden; margin-top: 20px; animation: fadeUp 0.5s var(--eq) both 0.28s; }
         .scene-sky { position: absolute; inset: 0; background: linear-gradient(180deg, #7AAECC 0%, #B8D8EC 50%, #D4A84A 100%); }
         .scene-sun { position: absolute; top: 10px; right: 48px; width: 20px; height: 20px; border-radius: 50%; background: radial-gradient(circle, #FFE860 20%, #FFB020 100%); }
         .scene-road { position: absolute; bottom: 0; left: 0; right: 0; height: 28px; background: #7A7A7A; border-top: 2px solid #929292; display: flex; align-items: center; overflow: hidden; }
@@ -371,10 +380,15 @@ export default function App() {
         .scene-wheel { position: absolute; bottom: -6px; width: 13px; height: 13px; border-radius: 50%; background: #1A1A1A; border: 2px solid #444; animation: spin .38s linear infinite; }
         .scene-wheel--front { right: 7px; } .scene-wheel--rear { left: 7px; }
         @keyframes spin { to { transform: rotate(360deg); } }
-        .search-panel { background: #1C1208; padding: 20px 20px 28px; }
-        .search-inputs { display: flex; flex-direction: column; margin-bottom: 14px; border-radius: 10px; overflow: hidden; border: 1.5px solid #3A2A10; }
-        .search-input { flex: 1; padding: 15px; background: #261C0C; border: none; border-bottom: 1px solid #3A2A10; font-size: 16px; color: #F0E4C8; outline: none; }
-        .search-btn { width: 100%; padding: 16px; border: none; border-radius: 10px; background: #C04830; color: #FFF; font-weight: 500; cursor: pointer; }
+        .search-panel { background: #1C1208; padding: 20px 20px 28px; animation: fadeUp 0.5s var(--eq) both 0.36s; }
+        .search-inputs { display: flex; flex-direction: column; margin-bottom: 14px; border-radius: 10px; overflow: hidden; border: 1.5px solid #3A2A10; transition: border-color 0.2s; }
+        .search-inputs:focus-within { border-color: #D4A050; }
+        .search-input { flex: 1; padding: 15px; background: #261C0C; border: none; border-bottom: 1px solid #3A2A10; font-size: 16px; color: #F0E4C8; outline: none; font-family: 'DM Sans', sans-serif; transition: background 0.18s; }
+        .search-input:focus { background: #2e200e; }
+        .search-input::placeholder { color: rgba(240,228,200,0.3); }
+        .search-btn { width: 100%; padding: 16px; border: none; border-radius: 10px; background: #C04830; color: #FFF; font-weight: 500; cursor: pointer; font-family: 'DM Sans', sans-serif; font-size: 15px; transition: background 0.18s var(--ei), transform 0.15s var(--eq); }
+        .search-btn:hover:not(:disabled) { background: #d45038; transform: translateY(-1px); }
+        .search-btn:active:not(:disabled) { transform: translateY(0); }
         .search-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
         /* === FULL-SCREEN LOADING OVERLAY === */
@@ -433,7 +447,17 @@ export default function App() {
         .welcome { background: #FAF4E4; border-radius: 14px; padding: 24px 20px; margin-bottom: 16px; box-shadow: 0 2px 12px rgba(30,16,4,.08); }
         .welcome-steps { list-style: none; }
         .welcome-steps li { display: flex; align-items: flex-start; gap: 12px; font-size: 14px; margin-bottom: 12px; color: #5A4228; }
-        .card { background: #FAF4E4; border-radius: 14px; overflow: hidden; margin-bottom: 16px; box-shadow: 0 2px 12px rgba(30,16,4,.1); }
+        .card {
+          background: #FAF4E4; border-radius: 14px; overflow: hidden; margin-bottom: 16px;
+          box-shadow: 0 2px 12px rgba(30,16,4,.1);
+          opacity: 0; transform: translateY(14px);
+          animation: fadeUp 0.38s var(--eq) forwards;
+          transition: transform 0.22s var(--eq), box-shadow 0.22s var(--eq);
+          position: relative;
+        }
+        .card:hover { transform: translateY(-3px); box-shadow: 0 10px 28px rgba(30,16,4,0.14); }
+        .card::before { content: ''; position: absolute; top: 14px; bottom: 14px; left: 0; width: 3px; background: #D4A050; border-radius: 0 2px 2px 0; transition: top 0.22s var(--eq), bottom 0.22s var(--eq); }
+        .card:hover::before { top: 0; bottom: 0; border-radius: 0; }
         .card-hero { height: 220px; position: relative; overflow: hidden; }
         .card-hero-img { width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .5s; }
         .card-hero-img--in { opacity: 1; }
@@ -447,8 +471,8 @@ export default function App() {
         .card-title { font-family: 'Playfair Display', serif; font-size: 22px; margin: 8px 0; }
         .card-summary { font-size: 13px; line-height: 1.55; color: #4A3820; margin-bottom: 12px; }
         .card-map-links { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
-        .card-map-btn { display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 500; text-decoration: none; letter-spacing: 0.2px; transition: opacity 0.15s; }
-        .card-map-btn:hover { opacity: 0.82; }
+        .card-map-btn { display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 500; text-decoration: none; letter-spacing: 0.2px; transition: opacity 0.15s, transform 0.15s var(--eq); }
+        .card-map-btn:hover { opacity: 0.82; transform: translateY(-1px); }
         .card-map-btn--google { background: #E8F0FE; color: #1A55CC; }
         .card-map-btn--apple  { background: #1C1208; color: #D4B870; }
         .card-link { color: #C04830; text-decoration: none; font-weight: 500; font-size: 13px; }
@@ -464,7 +488,8 @@ export default function App() {
         .footer-love { font-family: 'Lora', serif; font-style: italic; font-size: 15px; color: #7A6035; margin-bottom: 8px; }
         .footer-email { font-size: 13px; color: #C04830; text-decoration: none; }
         .footer-copy { font-size: 11px; color: #A89060; margin-top: 8px; }
-        .kofi { position: fixed; right: 16px; bottom: 24px; height: 44px; padding: 0 16px; border-radius: 22px; background: #FAF0C8; border: 1.5px solid #D4B860; display: flex; align-items: center; gap: 7px; text-decoration: none; box-shadow: 0 4px 20px rgba(0,0,0,0.2); z-index: 9999; }
+        .kofi { position: fixed; right: 16px; bottom: 24px; height: 44px; padding: 0 16px; border-radius: 22px; background: #FAF0C8; border: 1.5px solid #D4B860; display: flex; align-items: center; gap: 7px; text-decoration: none; box-shadow: 0 4px 20px rgba(0,0,0,0.2); z-index: 9999; transition: transform 0.18s var(--eq), box-shadow 0.18s; }
+        .kofi:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(0,0,0,0.25); }
         .kofi-label { font-size: 12px; font-weight: 500; color: #5A3C10; }
       `}</style>
 
@@ -503,7 +528,7 @@ export default function App() {
             </div>
           )}
 
-          {!loading && shown.map((p, i) => <Card key={p.name ?? i} poi={p} index={i} />)}
+          {!loading && shown.map((p, i) => <Card key={p.name ?? i} poi={p} index={i} animDelay={i} />)}
 
           {visibleCount < pois.length && (
             <button className="search-btn" style={{ background: 'transparent', color: '#C04830', border: '1px solid #C04830' }} onClick={() => setVisible(v => v + 6)}>Load More Stops</button>
@@ -511,6 +536,16 @@ export default function App() {
 
           {shown.length > 0 && (
             <>
+              <div style={{ margin: '8px 0 20px' }}>
+                <button
+                  style={{ background: 'none', border: '1px solid rgba(192,72,48,0.4)', borderRadius: 8, padding: '9px 16px', color: '#C04830', fontSize: 12, fontFamily: "'DM Sans', sans-serif", cursor: 'pointer', letterSpacing: '0.04em', transition: 'border-color 0.18s, transform 0.15s' }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor='#C04830'; e.currentTarget.style.transform='translateX(-2px)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor='rgba(192,72,48,0.4)'; e.currentTarget.style.transform=''; }}
+                  onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); setTimeout(() => document.querySelector('.search-input')?.focus(), 500); }}
+                >
+                  ← Plan another route
+                </button>
+              </div>
               <JourneyMap routeCoords={routeCoords} stops={pois} startName={start} endName={end} />
               <footer className="footer">
                 <p className="footer-love">A labour of love by <strong>Mike Stuchbery</strong></p>
