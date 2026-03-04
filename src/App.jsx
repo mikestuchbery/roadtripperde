@@ -125,27 +125,21 @@ async function geocode(place) {
 }
 
 /* ========= COMPONENTS ========= */
-function DrivingScene() {
+function HeroSteps() {
+  const steps = [
+    { icon: "📍", label: "Enter start & destination", detail: "Any two cities in Germany" },
+    { icon: "🗺️", label: "We chart your route", detail: "Driving directions via OSRM" },
+    { icon: "🏰", label: "Discover history nearby", detail: "Sites within 25 km of your path" },
+  ];
   return (
-    <div className="scene" aria-hidden="true">
-      <div className="scene-sky"><div className="scene-sun" /></div>
-      <div className="scene-hill scene-hill--far" /><div className="scene-hill scene-hill--near" />
-      <div className="scene-treeline">
-        {[...Array(10)].map((_, i) => (
-          <div key={i} className="scene-tree" style={{ animationDelay: `${(i * -0.9).toFixed(1)}s` }}>
-            <div className="scene-trunk" /><div className="scene-canopy" />
-          </div>
-        ))}
-      </div>
-      <div className="scene-road">
-        {[...Array(7)].map((_, i) => <div key={i} className="scene-dash" style={{ animationDelay: `${(i * -0.45).toFixed(2)}s` }} />)}
-      </div>
-      <div className="scene-car">
-        <div className="scene-car-body">
-          <div className="scene-car-roof" /><div className="scene-win scene-win--rear" /><div className="scene-win scene-win--front" /><div className="scene-headlight" />
+    <div className="hero-steps" aria-label="How it works">
+      {steps.map((s, i) => (
+        <div key={i} className="hero-step" style={{ animationDelay: `${0.32 + i * 0.12}s` }}>
+          <span className="hero-step-icon" aria-hidden="true">{s.icon}</span>
+          <span className="hero-step-label">{s.label}</span>
+          <span className="hero-step-detail">{s.detail}</span>
         </div>
-        <div className="scene-wheel scene-wheel--rear" /><div className="scene-wheel scene-wheel--front" />
-      </div>
+      ))}
     </div>
   );
 }
@@ -153,63 +147,105 @@ function DrivingScene() {
 function LoadingOverlay({ stage }) {
   const stages = ["Locating cities...", "Charting your route...", "Scanning for history..."];
   const stageIndex = stages.indexOf(stage);
+  // Deterministic dot positions so no hydration jitter
+  const dots = [
+    { cx: 18, cy: 40 }, { cx: 50, cy: 26 }, { cx: 82, cy: 38 },
+    { cx: 62, cy: 56 }, { cx: 34, cy: 60 }, { cx: 72, cy: 68 },
+  ];
   return (
     <div className="lo-overlay" aria-live="polite" aria-label="Loading">
-      <div className="lo-sky">
-        <div className="lo-sun" />
-        <div className="lo-cloud lo-cloud--1" />
-        <div className="lo-cloud lo-cloud--2" />
-        <div className="lo-cloud lo-cloud--3" />
-        {[...Array(18)].map((_, i) => (
-          <div key={i} className="lo-star" style={{
-            left: `${(i * 37 + 11) % 100}%`,
-            top: `${(i * 19 + 5) % 38}%`,
-            animationDelay: `${(i * 0.3).toFixed(1)}s`,
-            width: i % 3 === 0 ? "2px" : "1px",
-            height: i % 3 === 0 ? "2px" : "1px",
-          }} />
-        ))}
-      </div>
-      <div className="lo-hills lo-hills--far" />
-      <div className="lo-hills lo-hills--near" />
-      <div className="lo-trees" aria-hidden="true">
-        {[...Array(14)].map((_, i) => (
-          <div key={i} className="lo-tree" style={{ animationDelay: `${(i * -0.7).toFixed(1)}s`, height: `${52 + (i % 4) * 10}px` }}>
-            <div className="lo-tree-trunk" />
-            <div className="lo-tree-canopy" style={{ width: `${22 + (i % 3) * 6}px`, height: `${30 + (i % 4) * 8}px` }} />
-          </div>
-        ))}
-      </div>
-      <div className="lo-road">
-        <div className="lo-road-surface" />
-        <div className="lo-markings">
-          {[...Array(8)].map((_, i) => (
-            <div key={i} className="lo-dash" style={{ animationDelay: `${(i * -0.38).toFixed(2)}s` }} />
+      <div className="lo-backdrop" />
+      <div className="lo-box">
+        <svg className="lo-map" viewBox="0 0 100 90" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          {/* road segments between dots */}
+          {dots.slice(0, -1).map((d, i) => (
+            <line key={i}
+              x1={d.cx} y1={d.cy} x2={dots[i+1].cx} y2={dots[i+1].cy}
+              stroke="rgba(212,160,80,0.18)" strokeWidth="1.5" strokeDasharray="3 3"
+            />
           ))}
-        </div>
-        <div className="lo-verge lo-verge--left" />
-        <div className="lo-verge lo-verge--right" />
-      </div>
-      <div className="lo-car" aria-hidden="true">
-        <div className="lo-car-shadow" />
-        <div className="lo-car-body">
-          <div className="lo-car-roof" />
-          <div className="lo-car-win lo-car-win--rear" />
-          <div className="lo-car-win lo-car-win--front" />
-          <div className="lo-car-headlight" />
-          <div className="lo-car-taillight" />
-        </div>
-        <div className="lo-car-wheel lo-car-wheel--rear" />
-        <div className="lo-car-wheel lo-car-wheel--front" />
-      </div>
-      <div className="lo-panel">
-        <p className="lo-title">Road<em>tripper</em></p>
-        <p className="lo-stage">{stage}</p>
-        <div className="lo-dots">
+          {/* animated travelling line */}
+          <polyline
+            points={dots.map(d => `${d.cx},${d.cy}`).join(' ')}
+            fill="none" stroke="#D4A050" strokeWidth="1.5"
+            strokeDasharray="200" strokeDashoffset="200"
+            className="lo-route-line"
+          />
+          {/* waypoint circles */}
+          {dots.map((d, i) => (
+            <circle key={i} cx={d.cx} cy={d.cy} r="4.5"
+              fill="#1C1208" stroke="#D4A050" strokeWidth="1.5"
+              className="lo-dot-circle"
+              style={{ animationDelay: `${i * 0.18}s` }}
+            />
+          ))}
+          {/* start pin */}
+          <circle cx={dots[0].cx} cy={dots[0].cy} r="6" fill="#D4A050" opacity="0.9" />
+          {/* end pin */}
+          <circle cx={dots[dots.length-1].cx} cy={dots[dots.length-1].cy} r="6" fill="#C04830" opacity="0.9" />
+        </svg>
+        <p className="lo-stage">{stage || "Finding your route…"}</p>
+        <div className="lo-progress">
           {stages.map((s, i) => (
-            <div key={s} className={`lo-dot${i <= stageIndex ? " lo-dot--active" : ""}`} />
+            <div key={s} className={`lo-pip${i <= stageIndex ? " lo-pip--on" : ""}`} />
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function WindscreenHeader({ startName, endName }) {
+  return (
+    <div className="ws-wrap" aria-label={`Route from ${startName} to ${endName}`}>
+      <svg className="ws-svg" viewBox="0 0 320 130" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        {/* sky */}
+        <rect x="0" y="0" width="320" height="130" rx="12" fill="#1C1208" />
+        <rect x="0" y="0" width="320" height="80" rx="12" fill="url(#wsSky)" />
+        <defs>
+          <linearGradient id="wsSky" x1="0" y1="0" x2="0" y2="1" gradientUnits="objectBoundingBox">
+            <stop offset="0%" stopColor="#0D1B2A" />
+            <stop offset="100%" stopColor="#3A6080" />
+          </linearGradient>
+        </defs>
+        {/* moon */}
+        <circle cx="270" cy="22" r="10" fill="#F5E8C0" opacity="0.85" />
+        <circle cx="275" cy="19" r="8" fill="#1C2A38" />
+        {/* stars */}
+        {[[40,15],[100,8],[180,18],[220,10],[60,30],[150,5]].map(([x,y],i)=>(
+          <circle key={i} cx={x} cy={y} r="1" fill="#FFF" opacity={0.5+i*0.08} />
+        ))}
+        {/* far hills */}
+        <ellipse cx="80" cy="80" rx="100" ry="30" fill="#1A3A28" />
+        <ellipse cx="240" cy="82" rx="110" ry="28" fill="#1A3A28" />
+        {/* castle silhouette */}
+        <rect x="138" y="54" width="44" height="30" fill="#0D1B12" />
+        <rect x="132" y="48" width="12" height="20" fill="#0D1B12" />
+        <rect x="176" y="50" width="12" height="18" fill="#0D1B12" />
+        <rect x="152" y="44" width="14" height="22" fill="#0D1B12" />
+        {/* battlements */}
+        {[132,136,140].map((x,i)=><rect key={i} x={x} y="44" width="3" height="5" fill="#0D1B12" />)}
+        {[152,156,160].map((x,i)=><rect key={i} x={x} y="40" width="3" height="5" fill="#0D1B12" />)}
+        {[176,180,184].map((x,i)=><rect key={i} x={x} y="46" width="3" height="5" fill="#0D1B12" />)}
+        {/* castle window glow */}
+        <rect x="156" y="62" width="8" height="10" rx="1" fill="#D4A050" opacity="0.6" />
+        {/* road */}
+        <path d="M0 110 L130 90 L190 90 L320 110 L320 130 L0 130 Z" fill="#2A2218" />
+        <line x1="160" y1="90" x2="160" y2="130" stroke="#D4A050" strokeWidth="1.5" strokeDasharray="6 5" opacity="0.4" />
+        {/* near hills */}
+        <ellipse cx="40" cy="115" rx="80" ry="20" fill="#1A2810" />
+        <ellipse cx="280" cy="118" rx="80" ry="18" fill="#1A2810" />
+        {/* windscreen frame */}
+        <rect x="1" y="1" width="318" height="128" rx="11.5" fill="none" stroke="#3A2A10" strokeWidth="2" />
+        {/* wiper left */}
+        <line x1="90" y1="120" x2="155" y2="88" stroke="#4A3820" strokeWidth="3" strokeLinecap="round" className="ws-wiper ws-wiper--left" />
+        {/* wiper right */}
+        <line x1="230" y1="120" x2="165" y2="88" stroke="#4A3820" strokeWidth="3" strokeLinecap="round" className="ws-wiper ws-wiper--right" />
+      </svg>
+      <div className="ws-label">
+        <span className="ws-city ws-city--from">{startName}</span>
+        <span className="ws-arrow">→</span>
+        <span className="ws-city ws-city--to">{endName}</span>
       </div>
     </div>
   );
@@ -364,22 +400,17 @@ export default function App() {
         .hero-title { font-family: 'Playfair Display', serif; font-size: clamp(48px, 13vw, 72px); color: #F5EDDA; line-height: .95; animation: fadeUp 0.5s var(--eq) both 0.05s; }
         .hero-title em { font-style: italic; color: #D4A050; }
         .hero-sub { font-family: 'Lora', serif; font-style: italic; color: #A89060; font-size: 15px; margin-top: 10px; animation: fadeUp 0.5s var(--eq) both 0.18s; }
-        .scene { position: relative; height: 100px; overflow: hidden; margin-top: 20px; animation: fadeUp 0.5s var(--eq) both 0.28s; }
-        .scene-sky { position: absolute; inset: 0; background: linear-gradient(180deg, #7AAECC 0%, #B8D8EC 50%, #D4A84A 100%); }
-        .scene-sun { position: absolute; top: 10px; right: 48px; width: 20px; height: 20px; border-radius: 50%; background: radial-gradient(circle, #FFE860 20%, #FFB020 100%); }
-        .scene-road { position: absolute; bottom: 0; left: 0; right: 0; height: 28px; background: #7A7A7A; border-top: 2px solid #929292; display: flex; align-items: center; overflow: hidden; }
-        .scene-dash { width: 36px; height: 3px; background: #F0D840; margin-right: 28px; animation: dash .65s linear infinite; }
-        @keyframes dash { from { transform: translateX(64px); } to { transform: translateX(-64px); } }
-        .scene-car { position: absolute; bottom: 8px; left: 26%; animation: bob .32s ease-in-out infinite alternate; }
-        @keyframes bob { from { transform: translateY(0); } to { transform: translateY(-2px); } }
-        .scene-car-body { width: 64px; height: 20px; background: #C04830; border-radius: 3px; position: relative; }
-        .scene-car-roof { position: absolute; top: -13px; left: 10px; width: 38px; height: 15px; background: #A03820; border-radius: 5px 5px 0 0; }
-        .scene-win { position: absolute; top: -10px; height: 9px; background: rgba(160,210,240,.88); border-radius: 2px 2px 0 0; }
-        .scene-win--front { width: 14px; left: 34px; } .scene-win--rear { width: 13px; left: 16px; }
-        .scene-headlight { position: absolute; right: 2px; top: 6px; width: 4px; height: 5px; background: #FFE880; border-radius: 1px; }
-        .scene-wheel { position: absolute; bottom: -6px; width: 13px; height: 13px; border-radius: 50%; background: #1A1A1A; border: 2px solid #444; animation: spin .38s linear infinite; }
-        .scene-wheel--front { right: 7px; } .scene-wheel--rear { left: 7px; }
-        @keyframes spin { to { transform: rotate(360deg); } }
+        /* ── HeroSteps ── */
+        .hero-steps { display: flex; flex-direction: column; gap: 0; margin-top: 28px; padding-bottom: 4px; }
+        .hero-step {
+          display: flex; align-items: center; gap: 14px;
+          padding: 14px 20px; border-top: 1px solid rgba(212,160,80,0.12);
+          opacity: 0; animation: fadeUp 0.4s var(--eq) both;
+        }
+        .hero-step:last-child { border-bottom: 1px solid rgba(212,160,80,0.12); }
+        .hero-step-icon { font-size: 20px; flex-shrink: 0; width: 28px; text-align: center; }
+        .hero-step-label { font-family: 'Playfair Display', serif; font-size: 15px; color: #F0E4C8; flex: 1; }
+        .hero-step-detail { font-size: 11px; color: rgba(212,160,80,0.7); font-family: 'DM Sans', sans-serif; white-space: nowrap; }
         .search-panel { background: #1C1208; padding: 20px 20px 28px; animation: fadeUp 0.5s var(--eq) both 0.36s; }
         .search-inputs { display: flex; flex-direction: column; margin-bottom: 14px; border-radius: 10px; overflow: hidden; border: 1.5px solid #3A2A10; transition: border-color 0.2s; }
         .search-inputs:focus-within { border-color: #D4A050; }
@@ -391,57 +422,50 @@ export default function App() {
         .search-btn:active:not(:disabled) { transform: translateY(0); }
         .search-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
-        /* === FULL-SCREEN LOADING OVERLAY === */
-        .lo-overlay { position: fixed; inset: 0; z-index: 10000; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding-bottom: 0; }
-        .lo-sky { position: absolute; inset: 0; background: linear-gradient(180deg, #0D1B2A 0%, #1A3A5C 30%, #7AAECC 60%, #D4A84A 85%, #C06030 100%); }
-        .lo-sun { position: absolute; top: 18%; right: 22%; width: 56px; height: 56px; border-radius: 50%; background: radial-gradient(circle, #FFE860 20%, #FFB020 60%, rgba(255,140,0,0) 100%); box-shadow: 0 0 60px 20px rgba(255,180,30,0.35); animation: lo-sun-rise 3s ease-out forwards; }
-        @keyframes lo-sun-rise { from { transform: translateY(30px); opacity: 0.4; } to { transform: translateY(0); opacity: 1; } }
-        .lo-star { position: absolute; background: #FFF; border-radius: 50%; animation: lo-twinkle 2s ease-in-out infinite alternate; }
-        @keyframes lo-twinkle { from { opacity: 0.7; } to { opacity: 0.1; } }
-        .lo-cloud { position: absolute; background: rgba(255,255,255,0.18); border-radius: 50px; animation: lo-drift linear infinite; }
-        .lo-cloud--1 { width: 120px; height: 28px; top: 22%; left: -130px; animation-duration: 18s; animation-delay: 0s; }
-        .lo-cloud--2 { width: 80px;  height: 20px; top: 30%; left: -90px;  animation-duration: 24s; animation-delay: -8s; }
-        .lo-cloud--3 { width: 160px; height: 32px; top: 16%; left: -170px; animation-duration: 30s; animation-delay: -14s; }
-        @keyframes lo-drift { from { transform: translateX(0); } to { transform: translateX(120vw); } }
-        .lo-hills { position: absolute; left: -5%; right: -5%; }
-        .lo-hills--far  { bottom: 34%; height: 18%; background: #2A5C3A; border-radius: 60% 70% 0 0 / 80% 80% 0 0; }
-        .lo-hills--near { bottom: 26%; height: 16%; background: #1E4428; border-radius: 55% 65% 0 0 / 80% 80% 0 0; }
-        .lo-trees { position: absolute; bottom: 26%; left: 0; right: 0; height: 90px; display: flex; align-items: flex-end; overflow: hidden; }
-        .lo-tree { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; margin-right: 18px; animation: lo-tree-scroll 3.5s linear infinite; flex-shrink: 0; }
-        @keyframes lo-tree-scroll { from { transform: translateX(110vw); } to { transform: translateX(-120px); } }
-        .lo-tree-trunk { width: 6px; height: 14px; background: #5C3A1A; border-radius: 2px; }
-        .lo-tree-canopy { background: #2D6A3A; border-radius: 50% 50% 40% 40%; margin-bottom: -4px; }
-        .lo-road { position: absolute; bottom: 0; left: 0; right: 0; height: 26%; }
-        .lo-road-surface { position: absolute; inset: 0; background: #4A4A4A; }
-        .lo-road::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: #6A6A6A; }
-        .lo-verge { position: absolute; top: 0; width: 18px; height: 100%; }
-        .lo-verge--left  { left: 0;  background: #2A5C1A; }
-        .lo-verge--right { right: 0; background: #2A5C1A; }
-        .lo-markings { position: absolute; top: 50%; left: 0; right: 0; transform: translateY(-50%); display: flex; align-items: center; overflow: hidden; }
-        .lo-dash { width: 52px; height: 4px; background: #F0D840; margin-right: 40px; border-radius: 2px; flex-shrink: 0; animation: lo-road-scroll 0.55s linear infinite; }
-        @keyframes lo-road-scroll { from { transform: translateX(92px); } to { transform: translateX(-92px); } }
-        .lo-car { position: absolute; bottom: 20%; left: 50%; transform: translateX(-50%); animation: lo-bob 0.28s ease-in-out infinite alternate; }
-        @keyframes lo-bob { from { transform: translateX(-50%) translateY(0); } to { transform: translateX(-50%) translateY(-3px); } }
-        .lo-car-shadow { position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%); width: 110px; height: 8px; background: rgba(0,0,0,0.4); border-radius: 50%; filter: blur(3px); }
-        .lo-car-body { width: 110px; height: 34px; background: #C04830; border-radius: 5px; position: relative; }
-        .lo-car-roof { position: absolute; top: -22px; left: 18px; width: 64px; height: 26px; background: #A03820; border-radius: 8px 8px 0 0; }
-        .lo-car-win { position: absolute; top: -17px; height: 14px; background: rgba(160,210,240,0.88); border-radius: 3px 3px 0 0; }
-        .lo-car-win--front { width: 24px; left: 58px; }
-        .lo-car-win--rear  { width: 22px; left: 24px; }
-        .lo-car-headlight { position: absolute; right: 3px; top: 10px; width: 7px; height: 8px; background: #FFE880; border-radius: 2px; box-shadow: 0 0 8px 3px rgba(255,230,100,0.5); }
-        .lo-car-taillight { position: absolute; left: 3px; top: 10px; width: 6px; height: 8px; background: #FF3020; border-radius: 2px; box-shadow: 0 0 6px 2px rgba(255,50,20,0.4); }
-        .lo-car-wheel { position: absolute; bottom: -10px; width: 22px; height: 22px; border-radius: 50%; background: #1A1A1A; border: 3px solid #555; animation: lo-spin 0.35s linear infinite; }
-        .lo-car-wheel--front { right: 12px; }
-        .lo-car-wheel--rear  { left: 12px; }
-        @keyframes lo-spin { to { transform: rotate(360deg); } }
-        .lo-panel { position: absolute; top: 6%; left: 50%; transform: translateX(-50%); text-align: center; }
-        .lo-title { font-family: 'Playfair Display', serif; font-size: clamp(36px, 10vw, 56px); color: #F5EDDA; line-height: 1; text-shadow: 0 2px 20px rgba(0,0,0,0.5); }
-        .lo-title em { font-style: italic; color: #D4A050; }
-        .lo-stage { font-family: 'Lora', serif; font-style: italic; color: #C8B888; font-size: 16px; margin-top: 10px; animation: lo-fade-pulse 1.4s ease-in-out infinite alternate; }
+        /* ── Loading overlay ── */
+        .lo-overlay { position: fixed; inset: 0; z-index: 10000; display: flex; align-items: center; justify-content: center; }
+        .lo-backdrop { position: absolute; inset: 0; background: rgba(20,12,4,0.78); backdrop-filter: blur(3px); }
+        .lo-box {
+          position: relative; z-index: 1;
+          background: #1C1208; border: 1px solid rgba(212,160,80,0.2); border-radius: 16px;
+          padding: 28px 32px; width: min(320px, 88vw); text-align: center;
+          box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+          animation: fadeUp 0.3s var(--eq) both;
+        }
+        .lo-map { width: 100%; height: auto; margin-bottom: 16px; display: block; }
+        /* travelling route line */
+        .lo-route-line { animation: lo-draw 2.4s ease-in-out infinite; }
+        @keyframes lo-draw {
+          0%   { stroke-dashoffset: 200; opacity: 0.4; }
+          50%  { stroke-dashoffset: 0;   opacity: 1; }
+          100% { stroke-dashoffset: -200; opacity: 0.4; }
+        }
+        /* waypoint circle pulse */
+        .lo-dot-circle { animation: lo-dot-pulse 1.4s ease-in-out infinite alternate; }
+        @keyframes lo-dot-pulse {
+          from { r: 3.5; opacity: 0.5; }
+          to   { r: 5;   opacity: 1; }
+        }
+        .lo-stage { font-family: 'Lora', serif; font-style: italic; color: #C8B888; font-size: 14px; margin-bottom: 14px; animation: lo-fade-pulse 1.4s ease-in-out infinite alternate; }
         @keyframes lo-fade-pulse { from { opacity: 0.6; } to { opacity: 1; } }
-        .lo-dots { display: flex; gap: 8px; justify-content: center; margin-top: 14px; }
-        .lo-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.2); transition: background 0.4s, transform 0.4s; }
-        .lo-dot--active { background: #D4A050; transform: scale(1.25); }
+        .lo-progress { display: flex; gap: 6px; justify-content: center; }
+        .lo-pip { width: 28px; height: 3px; border-radius: 2px; background: rgba(212,160,80,0.18); transition: background 0.4s; }
+        .lo-pip--on { background: #D4A050; }
+
+        /* ── WindscreenHeader ── */
+        .ws-wrap { margin-bottom: 20px; animation: fadeUp 0.4s var(--eq) both; }
+        .ws-svg { width: 100%; height: auto; display: block; border-radius: 12px; border: 1px solid rgba(212,160,80,0.15); }
+        /* wiper animation */
+        @keyframes ws-wipe {
+          0%, 100% { transform-origin: bottom center; transform: rotate(-18deg); }
+          50%       { transform-origin: bottom center; transform: rotate(18deg); }
+        }
+        .ws-wiper { animation: ws-wipe 2.4s ease-in-out infinite; }
+        .ws-wiper--left  { animation-delay: 0s; }
+        .ws-wiper--right { animation-delay: 0.1s; }
+        .ws-label { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 10px 0 4px; }
+        .ws-city { font-family: 'Playfair Display', serif; font-size: 16px; color: #F0DCA8; }
+        .ws-arrow { color: #D4A050; font-size: 14px; opacity: 0.7; }
 
         .content { padding: 24px 16px; }
         .welcome { background: #FAF4E4; border-radius: 14px; padding: 24px 20px; margin-bottom: 16px; box-shadow: 0 2px 12px rgba(30,16,4,.08); }
@@ -499,7 +523,7 @@ export default function App() {
         <div className="hero">
           <h1 className="hero-title">Road<em>tripper</em></h1>
           <p className="hero-sub">History &amp; heritage along your route</p>
-          <DrivingScene />
+          <HeroSteps />
         </div>
 
         <div className="search-panel">
@@ -528,6 +552,9 @@ export default function App() {
             </div>
           )}
 
+          {hasSearched && !loading && shown.length > 0 && (
+            <WindscreenHeader startName={start} endName={end} />
+          )}
           {!loading && shown.map((p, i) => <Card key={p.name ?? i} poi={p} index={i} animDelay={i} />)}
 
           {visibleCount < pois.length && (
