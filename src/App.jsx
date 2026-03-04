@@ -195,7 +195,7 @@ function LoadingOverlay({ stage }) {
   );
 }
 
-function WindscreenHeader({ startName, endName }) {
+function WindscreenHeader({ startName, endName, siteCount, distanceKm }) {
   return (
     <div className="ws-wrap" aria-label={`Route from ${startName} to ${endName}`}>
       <p className="ws-eyebrow">Your route</p>
@@ -205,6 +205,13 @@ function WindscreenHeader({ startName, endName }) {
         <span className="ws-city">{endName}</span>
       </h2>
       <div className="ws-rule" aria-hidden="true" />
+      {(siteCount > 0 || distanceKm) && (
+        <p className="ws-meta">
+          {siteCount > 0 && <span>{siteCount} {siteCount === 1 ? "site" : "sites"}</span>}
+          {siteCount > 0 && distanceKm && <span className="ws-meta-dot" aria-hidden="true"> · </span>}
+          {distanceKm && <span>{distanceKm.toLocaleString()} km</span>}
+        </p>
+      )}
     </div>
   );
 }
@@ -301,10 +308,11 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [loadingStage, setLoadingStage] = useState("");
   const [hasSearched, setSearched] = useState(false);
+  const [routeDistanceKm, setRouteDistanceKm] = useState(null);
 
   const findStops = async () => {
     if (!start || !end || loading) return;
-    setLoading(true); setSearched(true); setPois([]); setCoords([]);
+    setLoading(true); setSearched(true); setPois([]); setCoords([]); setRouteDistanceKm(null);
     try {
       setLoadingStage("Locating cities...");
       const A = await geocode(start);
@@ -314,7 +322,9 @@ export default function App() {
       const data = await r.json();
       if (!data.routes?.length) throw new Error("No route found.");
       const coords = data.routes[0].geometry.coordinates;
+      const distKm = Math.round((data.routes[0].distance ?? 0) / 1000);
       setCoords(coords);
+      setRouteDistanceKm(distKm);
       setLoadingStage("Scanning for history...");
       const seen = new Set();
       const candidates = ALL_POIS.reduce((acc, p) => {
@@ -447,9 +457,28 @@ export default function App() {
         .ws-arrow { color: #D4A050; font-style: normal; opacity: 0.7; font-size: 0.8em; }
         .ws-rule {
           width: 40px; height: 1px; background: rgba(212,160,80,0.35);
-          margin: 14px auto 0;
+          margin: 14px auto 10px;
         }
+        .ws-meta {
+          font-family: 'DM Sans', sans-serif;
+          font-size: 12px; color: rgba(212,160,80,0.65);
+          letter-spacing: 0.06em;
+        }
+        .ws-meta-dot { opacity: 0.5; }
 
+        /* ── Empty state ── */
+        .empty-state {
+          text-align: center; padding: 48px 24px;
+          animation: fadeUp 0.4s var(--eq) both;
+        }
+        .empty-icon { font-size: 36px; margin-bottom: 16px; }
+        .empty-title {
+          font-family: 'Playfair Display', serif;
+          font-size: 20px; color: #3A2A10; margin-bottom: 10px;
+        }
+        .empty-body {
+          font-size: 13px; color: #7A6035; line-height: 1.6; max-width: 280px; margin: 0 auto;
+        }
         .content { padding: 24px 16px; }
         .welcome { background: #FAF4E4; border-radius: 14px; padding: 24px 20px; margin-bottom: 16px; box-shadow: 0 2px 12px rgba(30,16,4,.08); }
         .welcome-steps { list-style: none; }
@@ -536,7 +565,14 @@ export default function App() {
           )}
 
           {hasSearched && !loading && shown.length > 0 && (
-            <WindscreenHeader startName={start} endName={end} />
+            <WindscreenHeader startName={start} endName={end} siteCount={pois.length} distanceKm={routeDistanceKm} />
+          )}
+          {hasSearched && !loading && pois.length === 0 && (
+            <div className="empty-state">
+              <p className="empty-icon" aria-hidden="true">🗺️</p>
+              <h3 className="empty-title">No sites found along this route</h3>
+              <p className="empty-body">Try a longer route, or two cities further apart — our dataset covers all 16 German states.</p>
+            </div>
           )}
           {!loading && shown.map((p, i) => <Card key={p.name ?? i} poi={p} index={i} animDelay={i} />)}
 
