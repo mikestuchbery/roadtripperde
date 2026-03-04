@@ -484,7 +484,14 @@ export default function App() {
           font-size: 13px; color: #7A6035; line-height: 1.6; max-width: 280px; margin: 0 auto;
         }
         .content { padding: 24px 16px; }
-        .welcome { background: #FAF4E4; border-radius: 14px; padding: 24px 20px; margin-bottom: 16px; box-shadow: 0 2px 12px rgba(30,16,4,.08); }
+        .welcome {
+          background: #FAF4E4;
+          border-radius: 14px;
+          padding: 24px 20px;
+          margin-bottom: 16px;
+          box-shadow: 0 2px 12px rgba(30,16,4,.08);
+          text-align: center;
+        }
         .welcome-steps { list-style: none; }
         .welcome-steps li { display: flex; align-items: flex-start; gap: 12px; font-size: 14px; margin-bottom: 12px; color: #5A4228; }
         .card {
