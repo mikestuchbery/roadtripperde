@@ -343,6 +343,8 @@ export default function App() {
   return (
     <>
       <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&display=swap');
+
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'DM Sans', sans-serif; background: #E8DEC6; min-height: 100dvh; }
 
@@ -355,8 +357,20 @@ export default function App() {
 
         .hero { background: #1C1208; padding: 52px 20px 0; position: relative; overflow: hidden; text-align: center; }
         .hero::after { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse 80% 60% at 50% 120%, rgba(212,160,80,0.10) 0%, transparent 70%); pointer-events: none; }
-        .hero-title { font-family: 'Playfair Display', serif; font-size: clamp(48px, 13vw, 72px); color: #F5EDDA; line-height: .95; animation: fadeUp 0.5s var(--eq) both 0.05s; }
-        .hero-title em { font-style: italic; color: #D4A050; }
+        .hero-title {
+          font-family: 'Cinzel', serif;
+          font-size: clamp(42px, 11vw, 66px);
+          letter-spacing: 0.07em;
+          text-transform: uppercase;
+          color: #F5EDDA;
+          line-height: 1;
+          animation: fadeUp 0.5s var(--eq) both 0.05s;
+        }
+        .hero-title em {
+          font-style: normal;
+          color: #D4A050;
+          letter-spacing: 0.09em;
+        }
         .hero-sub { font-family: 'Lora', serif; font-style: italic; color: #A89060; font-size: 15px; margin-top: 10px; animation: fadeUp 0.5s var(--eq) both 0.18s; }
         /* ── HeroSteps ── */
         .hero-steps {
@@ -504,7 +518,7 @@ export default function App() {
 
       <div className="page">
         <div className="hero">
-          <h1 className="hero-title">Road<em>tripper</em></h1>
+          <h1 className="hero-title">Roadtripper<em>DE</em></h1>
           <p className="hero-sub">History &amp; heritage along your route</p>
           <HeroSteps />
         </div>
