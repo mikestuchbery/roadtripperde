@@ -127,15 +127,15 @@ async function geocode(place) {
 /* ========= COMPONENTS ========= */
 function HeroSteps() {
   const steps = [
-    { icon: "📍", label: "Enter start & destination", detail: "Any two cities in Germany" },
-    { icon: "🗺️", label: "We chart your route", detail: "Driving directions via OSRM" },
-    { icon: "🏰", label: "Discover history nearby", detail: "Sites within 25 km of your path" },
+    { num: "1", label: "Enter cities", detail: "Start & destination in Germany" },
+    { num: "2", label: "Chart your route", detail: "We map the driving path" },
+    { num: "3", label: "Discover history", detail: "Sites within 25 km of your route" },
   ];
   return (
     <div className="hero-steps" aria-label="How it works">
       {steps.map((s, i) => (
-        <div key={i} className="hero-step" style={{ animationDelay: `${0.32 + i * 0.12}s` }}>
-          <span className="hero-step-icon" aria-hidden="true">{s.icon}</span>
+        <div key={i} className="hero-step" style={{ animationDelay: `${0.30 + i * 0.13}s` }}>
+          <span className="hero-step-num" aria-hidden="true">{s.num}</span>
           <span className="hero-step-label">{s.label}</span>
           <span className="hero-step-detail">{s.detail}</span>
         </div>
@@ -198,55 +198,13 @@ function LoadingOverlay({ stage }) {
 function WindscreenHeader({ startName, endName }) {
   return (
     <div className="ws-wrap" aria-label={`Route from ${startName} to ${endName}`}>
-      <svg className="ws-svg" viewBox="0 0 320 130" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        {/* sky */}
-        <rect x="0" y="0" width="320" height="130" rx="12" fill="#1C1208" />
-        <rect x="0" y="0" width="320" height="80" rx="12" fill="url(#wsSky)" />
-        <defs>
-          <linearGradient id="wsSky" x1="0" y1="0" x2="0" y2="1" gradientUnits="objectBoundingBox">
-            <stop offset="0%" stopColor="#0D1B2A" />
-            <stop offset="100%" stopColor="#3A6080" />
-          </linearGradient>
-        </defs>
-        {/* moon */}
-        <circle cx="270" cy="22" r="10" fill="#F5E8C0" opacity="0.85" />
-        <circle cx="275" cy="19" r="8" fill="#1C2A38" />
-        {/* stars */}
-        {[[40,15],[100,8],[180,18],[220,10],[60,30],[150,5]].map(([x,y],i)=>(
-          <circle key={i} cx={x} cy={y} r="1" fill="#FFF" opacity={0.5+i*0.08} />
-        ))}
-        {/* far hills */}
-        <ellipse cx="80" cy="80" rx="100" ry="30" fill="#1A3A28" />
-        <ellipse cx="240" cy="82" rx="110" ry="28" fill="#1A3A28" />
-        {/* castle silhouette */}
-        <rect x="138" y="54" width="44" height="30" fill="#0D1B12" />
-        <rect x="132" y="48" width="12" height="20" fill="#0D1B12" />
-        <rect x="176" y="50" width="12" height="18" fill="#0D1B12" />
-        <rect x="152" y="44" width="14" height="22" fill="#0D1B12" />
-        {/* battlements */}
-        {[132,136,140].map((x,i)=><rect key={i} x={x} y="44" width="3" height="5" fill="#0D1B12" />)}
-        {[152,156,160].map((x,i)=><rect key={i} x={x} y="40" width="3" height="5" fill="#0D1B12" />)}
-        {[176,180,184].map((x,i)=><rect key={i} x={x} y="46" width="3" height="5" fill="#0D1B12" />)}
-        {/* castle window glow */}
-        <rect x="156" y="62" width="8" height="10" rx="1" fill="#D4A050" opacity="0.6" />
-        {/* road */}
-        <path d="M0 110 L130 90 L190 90 L320 110 L320 130 L0 130 Z" fill="#2A2218" />
-        <line x1="160" y1="90" x2="160" y2="130" stroke="#D4A050" strokeWidth="1.5" strokeDasharray="6 5" opacity="0.4" />
-        {/* near hills */}
-        <ellipse cx="40" cy="115" rx="80" ry="20" fill="#1A2810" />
-        <ellipse cx="280" cy="118" rx="80" ry="18" fill="#1A2810" />
-        {/* windscreen frame */}
-        <rect x="1" y="1" width="318" height="128" rx="11.5" fill="none" stroke="#3A2A10" strokeWidth="2" />
-        {/* wiper left */}
-        <line x1="90" y1="120" x2="155" y2="88" stroke="#4A3820" strokeWidth="3" strokeLinecap="round" className="ws-wiper ws-wiper--left" />
-        {/* wiper right */}
-        <line x1="230" y1="120" x2="165" y2="88" stroke="#4A3820" strokeWidth="3" strokeLinecap="round" className="ws-wiper ws-wiper--right" />
-      </svg>
-      <div className="ws-label">
-        <span className="ws-city ws-city--from">{startName}</span>
-        <span className="ws-arrow">→</span>
-        <span className="ws-city ws-city--to">{endName}</span>
-      </div>
+      <p className="ws-eyebrow">Your route</p>
+      <h2 className="ws-heading">
+        <span className="ws-city">{startName}</span>
+        <span className="ws-arrow" aria-hidden="true"> → </span>
+        <span className="ws-city">{endName}</span>
+      </h2>
+      <div className="ws-rule" aria-hidden="true" />
     </div>
   );
 }
@@ -401,16 +359,33 @@ export default function App() {
         .hero-title em { font-style: italic; color: #D4A050; }
         .hero-sub { font-family: 'Lora', serif; font-style: italic; color: #A89060; font-size: 15px; margin-top: 10px; animation: fadeUp 0.5s var(--eq) both 0.18s; }
         /* ── HeroSteps ── */
-        .hero-steps { display: flex; flex-direction: column; gap: 0; margin-top: 28px; padding-bottom: 4px; }
-        .hero-step {
-          display: flex; align-items: center; gap: 14px;
-          padding: 14px 20px; border-top: 1px solid rgba(212,160,80,0.12);
-          opacity: 0; animation: fadeUp 0.4s var(--eq) both;
+        .hero-steps {
+          display: flex; flex-direction: row; justify-content: center;
+          gap: 0; margin-top: 36px; padding: 0 12px 2px;
         }
-        .hero-step:last-child { border-bottom: 1px solid rgba(212,160,80,0.12); }
-        .hero-step-icon { font-size: 20px; flex-shrink: 0; width: 28px; text-align: center; }
-        .hero-step-label { font-family: 'Playfair Display', serif; font-size: 15px; color: #F0E4C8; flex: 1; }
-        .hero-step-detail { font-size: 11px; color: rgba(212,160,80,0.7); font-family: 'DM Sans', sans-serif; white-space: nowrap; }
+        .hero-step {
+          display: flex; flex-direction: column; align-items: center;
+          flex: 1; max-width: 160px; padding: 0 10px;
+          opacity: 0; animation: fadeUp 0.45s var(--eq) both;
+        }
+        .hero-step + .hero-step {
+          border-left: 1px solid rgba(212,160,80,0.15);
+        }
+        .hero-step-num {
+          font-family: 'Playfair Display', serif;
+          font-style: italic; font-size: 48px; line-height: 1;
+          color: #D4A050; display: block; margin-bottom: 8px;
+        }
+        .hero-step-label {
+          font-family: 'Playfair Display', serif;
+          font-size: 13px; color: #F0E4C8; text-align: center;
+          line-height: 1.3; margin-bottom: 5px;
+        }
+        .hero-step-detail {
+          font-family: 'DM Sans', sans-serif;
+          font-size: 11px; color: rgba(212,160,80,0.55);
+          text-align: center; line-height: 1.4;
+        }
         .search-panel { background: #1C1208; padding: 20px 20px 28px; animation: fadeUp 0.5s var(--eq) both 0.36s; }
         .search-inputs { display: flex; flex-direction: column; margin-bottom: 14px; border-radius: 10px; overflow: hidden; border: 1.5px solid #3A2A10; transition: border-color 0.2s; }
         .search-inputs:focus-within { border-color: #D4A050; }
@@ -453,19 +428,27 @@ export default function App() {
         .lo-pip--on { background: #D4A050; }
 
         /* ── WindscreenHeader ── */
-        .ws-wrap { margin-bottom: 20px; animation: fadeUp 0.4s var(--eq) both; }
-        .ws-svg { width: 100%; height: auto; display: block; border-radius: 12px; border: 1px solid rgba(212,160,80,0.15); }
-        /* wiper animation */
-        @keyframes ws-wipe {
-          0%, 100% { transform-origin: bottom center; transform: rotate(-18deg); }
-          50%       { transform-origin: bottom center; transform: rotate(18deg); }
+        .ws-wrap {
+          margin-bottom: 24px; text-align: center;
+          animation: fadeUp 0.4s var(--eq) both;
+          padding: 4px 0 20px;
         }
-        .ws-wiper { animation: ws-wipe 2.4s ease-in-out infinite; }
-        .ws-wiper--left  { animation-delay: 0s; }
-        .ws-wiper--right { animation-delay: 0.1s; }
-        .ws-label { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 10px 0 4px; }
-        .ws-city { font-family: 'Playfair Display', serif; font-size: 16px; color: #F0DCA8; }
-        .ws-arrow { color: #D4A050; font-size: 14px; opacity: 0.7; }
+        .ws-eyebrow {
+          font-family: 'DM Sans', sans-serif;
+          font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
+          color: rgba(212,160,80,0.6); margin-bottom: 8px;
+        }
+        .ws-heading {
+          font-family: 'Playfair Display', serif;
+          font-size: clamp(22px, 6vw, 32px);
+          font-weight: 400; color: #F0DCA8; line-height: 1.15;
+        }
+        .ws-city { font-style: italic; }
+        .ws-arrow { color: #D4A050; font-style: normal; opacity: 0.7; font-size: 0.8em; }
+        .ws-rule {
+          width: 40px; height: 1px; background: rgba(212,160,80,0.35);
+          margin: 14px auto 0;
+        }
 
         .content { padding: 24px 16px; }
         .welcome { background: #FAF4E4; border-radius: 14px; padding: 24px 20px; margin-bottom: 16px; box-shadow: 0 2px 12px rgba(30,16,4,.08); }
