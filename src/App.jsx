@@ -371,6 +371,25 @@ export default function App() {
         .hero::after { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse 80% 60% at 50% 120%, rgba(212,160,80,0.10) 0%, transparent 70%); pointer-events: none; }
         .hero-title { font-family: 'Playfair Display', serif; font-size: clamp(48px, 13vw, 72px); color: #F5EDDA; line-height: .95; animation: fadeUp 0.5s var(--eq) both 0.05s; }
         .hero-title em { font-style: italic; color: #D4A050; }
+        .hero-title .beta-tag {
+          font-family: 'DM Sans', sans-serif;
+          font-style: normal;
+          font-size: clamp(10px, 2.5vw, 13px);
+          font-weight: 600;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: #C04830;
+          background: rgba(192,72,48,0.12);
+          border: 1px solid rgba(192,72,48,0.35);
+          border-radius: 4px;
+          padding: 3px 7px;
+          vertical-align: super;
+          margin-left: 6px;
+          line-height: 1;
+          display: inline-block;
+          position: relative;
+          top: -0.1em;
+        }
         .hero-sub { font-family: 'Lora', serif; font-style: italic; color: #A89060; font-size: 15px; margin-top: 10px; animation: fadeUp 0.5s var(--eq) both 0.18s; }
         /* ── HeroSteps ── */
         .hero-steps {
@@ -483,10 +502,51 @@ export default function App() {
         .empty-body {
           font-size: 13px; color: #7A6035; line-height: 1.6; max-width: 280px; margin: 0 auto;
         }
+
+        /* ── Welcome / discover prompt ── */
+        .discover-prompt {
+          background: #FAF4E4; border-radius: 14px; padding: 32px 24px;
+          margin-bottom: 16px; box-shadow: 0 2px 12px rgba(30,16,4,.08);
+          text-align: center;
+          animation: fadeUp 0.4s var(--eq) both 0.1s;
+          opacity: 0;
+        }
+        .discover-icon {
+          font-size: 40px; display: block; margin-bottom: 14px;
+          animation: fadeUp 0.4s var(--eq) both 0.2s;
+          opacity: 0;
+        }
+        .discover-heading {
+          font-family: 'Playfair Display', serif;
+          font-size: clamp(18px, 5vw, 22px);
+          font-weight: 400; color: #2A1A08;
+          margin-bottom: 8px;
+          line-height: 1.25;
+        }
+        .discover-heading em { font-style: italic; color: #C04830; }
+        .discover-sub {
+          font-family: 'Lora', serif;
+          font-style: italic;
+          font-size: 13px;
+          color: #7A6035;
+          line-height: 1.6;
+        }
+        .discover-divider {
+          width: 36px; height: 1px;
+          background: rgba(212,160,80,0.4);
+          margin: 18px auto 16px;
+        }
+        .discover-credit {
+          font-size: 12px; color: #9A7845; line-height: 1.8;
+        }
+        .discover-credit a {
+          color: #C04830; text-decoration: none;
+          border-bottom: 1px solid rgba(192,72,48,0.3);
+          transition: border-color 0.15s;
+        }
+        .discover-credit a:hover { border-bottom-color: #C04830; }
+
         .content { padding: 24px 16px; }
-        .welcome { background: #FAF4E4; border-radius: 14px; padding: 24px 20px; margin-bottom: 16px; box-shadow: 0 2px 12px rgba(30,16,4,.08); }
-        .welcome-steps { list-style: none; }
-        .welcome-steps li { display: flex; align-items: flex-start; gap: 12px; font-size: 14px; margin-bottom: 12px; color: #5A4228; }
         .card {
           background: #FAF4E4; border-radius: 14px; overflow: hidden; margin-bottom: 16px;
           box-shadow: 0 2px 12px rgba(30,16,4,.1);
@@ -537,7 +597,7 @@ export default function App() {
 
       <div className="page">
         <div className="hero">
-          <h1 className="hero-title">Road<em>tripper</em></h1>
+          <h1 className="hero-title">Road<em>tripper</em><span className="beta-tag">Beta</span></h1>
           <p className="hero-sub">History &amp; heritage along your route</p>
           <HeroSteps />
         </div>
@@ -554,17 +614,16 @@ export default function App() {
 
         <div className="content">
           {!hasSearched && !loading && (
-            <div className="welcome">
-              <h2 style={{ fontFamily: "'Playfair Display', serif", marginBottom: '16px' }}>How it works</h2>
-              <ul className="welcome-steps">
-                <li>Enter start and destination in Germany.</li>
-                <li>Discover historic sites within 25km of your path.</li>
-                <li>Read entries or navigate via Google/Apple Maps.</li>
-              </ul>
-              <div style={{ height: '1px', background: '#D4B860', margin: '16px 0' }} />
-              <p className="footer-love">A labour of love by <strong>Mike Stuchbery</strong></p>
-              <a href="mailto:michael.stuchbery@gmail.com" className="footer-email">michael.stuchbery@gmail.com</a>
-              <p className="footer-copy">© 2026 Mike Stuchbery</p>
+            <div className="discover-prompt">
+              <span className="discover-icon" role="img" aria-label="Compass">🧭</span>
+              <h2 className="discover-heading">What would you like to<br /><em>discover today?</em></h2>
+              <p className="discover-sub">Enter two cities and uncover the history<br />waiting just off your route.</p>
+              <div className="discover-divider" />
+              <p className="discover-credit">
+                A labour of love by <strong>Mike Stuchbery</strong><br />
+                <a href="mailto:michael.stuchbery@gmail.com">Comments? Questions? Report a bug?</a>
+              </p>
+              <p style={{ fontSize: '11px', color: '#A89060', marginTop: '8px' }}>© 2026 Mike Stuchbery</p>
             </div>
           )}
 
@@ -599,7 +658,7 @@ export default function App() {
               <JourneyMap routeCoords={routeCoords} stops={pois} startName={start} endName={end} />
               <footer className="footer">
                 <p className="footer-love">A labour of love by <strong>Mike Stuchbery</strong></p>
-                <a href="mailto:michael.stuchbery@gmail.com" className="footer-email">michael.stuchbery@gmail.com</a>
+                <a href="mailto:michael.stuchbery@gmail.com" className="footer-email">Comments? Questions? Report a bug?</a>
                 <p className="footer-copy">© 2026 Mike Stuchbery</p>
               </footer>
             </>
