@@ -465,9 +465,9 @@ export default function App() {
         }
 
         .content { padding: 24px 16px; }
-        .welcome { background: #FAF4E4; border-radius: 14px; padding: 24px 20px; margin-bottom: 16px; box-shadow: 0 2px 12px rgba(30,16,4,.08); }
-        .welcome-steps { list-style: none; }
-        .welcome-steps li { display: flex; align-items: flex-start; gap: 12px; font-size: 14px; margin-bottom: 12px; color: #5A4228; }
+        .welcome { background: #FAF4E4; border-radius: 14px; padding: 24px 20px; margin-bottom: 16px; box-shadow: 0 2px 12px rgba(30,16,4,.08); text-align: center; }
+        .welcome-steps { list-style: none; max-width: 520px; margin: 0 auto; }
+        .welcome-steps li { font-size: 14px; margin-bottom: 12px; color: #5A4228; text-align: center; }
         .card {
           background: #FAF4E4; border-radius: 14px; overflow: hidden; margin-bottom: 16px;
           box-shadow: 0 2px 12px rgba(30,16,4,.1);
