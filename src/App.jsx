@@ -216,7 +216,7 @@ function WindscreenHeader({ startName, endName, siteCount, distanceKm }) {
   );
 }
 
-function Card({ poi, index, animDelay }) {
+function Card({ poi, index, animDelay, inJourney, onToggleJourney }) {
   const name = poi.name ?? poi.title ?? "Site";
   const [img, setImg] = useState(null);
   const [wikiTitle, setWikiTitle] = useState(null);
@@ -266,6 +266,9 @@ function Card({ poi, index, animDelay }) {
         ) : (
           <a href={`https://en.wikipedia.org/w/index.php?search=${encodeURIComponent(name)}`} target="_blank" rel="noreferrer" className="card-link">More info →</a>
         )}
+        <button className={`jrn-btn${inJourney ? " jrn-btn--in" : ""}`} onClick={onToggleJourney}>
+          {inJourney ? "✓ In journey" : "+ Add to journey"}
+        </button>
       </div>
     </div>
   );
@@ -298,6 +301,62 @@ function JourneyMap({ routeCoords, stops, startName, endName }) {
   );
 }
 
+/* ========= JOURNEY DRAWER ========= */
+function JourneyDrawer({ journey, onRemove, start, end }) {
+  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  if (!journey.length) return null;
+
+  const waypointStr = journey.slice(0, 9).map(p => `${p.lat},${p.lon}`).join("|");
+  const origin = start || (journey[0].lat + "," + journey[0].lon);
+  const dest   = end   || (journey[journey.length - 1].lat + "," + journey[journey.length - 1].lon);
+  const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(dest)}&waypoints=${encodeURIComponent(waypointStr)}&travelmode=driving`;
+
+  const copyList = () => {
+    const header = start && end ? `RoadTripperDE Journey: ${start} → ${end}\n${"─".repeat(40)}\n` : "RoadTripperDE Journey\n─────────────────────\n";
+    const lines = journey.map((p, i) => {
+      const name = p.name ?? p.title ?? "Site";
+      return `${i + 1}. ${name}\n   📍 ${p.lat}, ${p.lon}${p.type ? `  [${p.type}]` : ""}`;
+    }).join("\n\n");
+    navigator.clipboard.writeText(header + lines).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <div className="jrn-drawer">
+      <button className="jrn-handle" onClick={() => setOpen(o => !o)} aria-expanded={open}>
+        <span className="jrn-handle-left">
+          <span>My Journey</span>
+          <span className="jrn-badge">{journey.length} {journey.length === 1 ? "stop" : "stops"}</span>
+        </span>
+        <span className={`jrn-chevron${open ? " jrn-chevron--open" : ""}`}>▲</span>
+      </button>
+      {open && (
+        <div className="jrn-content">
+          <ul className="jrn-list">
+            {journey.map((p, i) => (
+              <li key={p.name ?? i} className="jrn-item">
+                <span className="jrn-item-num">{i + 1}</span>
+                <span className="jrn-item-name">{p.name ?? p.title}</span>
+                <button className="jrn-remove" onClick={() => onRemove(p)} aria-label={`Remove ${p.name ?? p.title}`}>✕</button>
+              </li>
+            ))}
+          </ul>
+          <div className="jrn-actions">
+            <a href={mapsUrl} target="_blank" rel="noreferrer" className="jrn-action-btn jrn-action-btn--maps">Open in Google Maps →</a>
+            <button className={`jrn-action-btn jrn-action-btn--copy${copied ? " copied" : ""}`} onClick={copyList}>
+              {copied ? "✓ Copied!" : "Copy list"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ========= MAIN APP ========= */
 export default function App() {
   const [start, setStart] = useState("");
@@ -309,6 +368,16 @@ export default function App() {
   const [loadingStage, setLoadingStage] = useState("");
   const [hasSearched, setSearched] = useState(false);
   const [routeDistanceKm, setRouteDistanceKm] = useState(null);
+  const [journey, setJourney] = useState([]);
+
+  const toggleJourney = (poi) => {
+    const key = poi.name ?? poi.title;
+    setJourney(prev =>
+      prev.some(p => (p.name ?? p.title) === key)
+        ? prev.filter(p => (p.name ?? p.title) !== key)
+        : [...prev, poi]
+    );
+  };
 
   const findStops = async () => {
     if (!start || !end || loading) return;
@@ -369,8 +438,8 @@ export default function App() {
 
         .hero { background: #1C1208; padding: 52px 20px 0; position: relative; overflow: hidden; text-align: center; }
         .hero::after { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse 80% 60% at 50% 120%, rgba(212,160,80,0.10) 0%, transparent 70%); pointer-events: none; }
-        .hero-title { font-family: 'Playfair Display', serif; font-size: clamp(48px, 13vw, 72px); color: #F5EDDA; line-height: .95; animation: fadeUp 0.5s var(--eq) both 0.05s; }
-        .hero-title em { font-style: italic; color: #D4A050; }
+        .hero-title { font-family: 'Overpass', sans-serif; font-size: clamp(42px, 12vw, 68px); font-weight: 900; letter-spacing: -0.01em; color: #F5EDDA; line-height: .95; text-transform: uppercase; animation: fadeUp 0.5s var(--eq) both 0.05s; }
+        .hero-title .title-de { color: #D4A050; }
         .hero-title .beta-tag {
           font-family: 'DM Sans', sans-serif;
           font-style: normal;
@@ -588,16 +657,42 @@ export default function App() {
         .footer-love { font-family: 'Lora', serif; font-style: italic; font-size: 15px; color: #7A6035; margin-bottom: 8px; }
         .footer-email { font-size: 13px; color: #C04830; text-decoration: none; }
         .footer-copy { font-size: 11px; color: #A89060; margin-top: 8px; }
-        .kofi { position: fixed; right: 16px; bottom: 24px; height: 44px; padding: 0 16px; border-radius: 22px; background: #FAF0C8; border: 1.5px solid #D4B860; display: flex; align-items: center; gap: 7px; text-decoration: none; box-shadow: 0 4px 20px rgba(0,0,0,0.2); z-index: 9999; transition: transform 0.18s var(--eq), box-shadow 0.18s; }
+        .kofi { position: fixed; right: 16px; bottom: 24px; height: 44px; padding: 0 16px; border-radius: 22px; background: #FAF0C8; border: 1.5px solid #D4B860; display: flex; align-items: center; gap: 7px; text-decoration: none; box-shadow: 0 4px 20px rgba(0,0,0,0.2); z-index: 9999; transition: transform 0.18s var(--eq), box-shadow 0.18s, bottom 0.3s var(--eq); }
         .kofi:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(0,0,0,0.25); }
         .kofi-label { font-size: 12px; font-weight: 500; color: #5A3C10; }
+
+        /* ── Journey drawer ── */
+        .jrn-drawer { position: fixed; bottom: 0; left: 0; right: 0; z-index: 9998; background: #1C1208; border-top: 1px solid rgba(212,160,80,0.25); box-shadow: 0 -4px 24px rgba(0,0,0,0.4); }
+        .jrn-handle { width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; background: none; border: none; cursor: pointer; color: #F0E4C8; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500; }
+        .jrn-handle-left { display: flex; align-items: center; gap: 10px; }
+        .jrn-badge { background: #D4A050; color: #1C1208; border-radius: 10px; padding: 2px 8px; font-size: 11px; font-weight: 700; }
+        .jrn-chevron { color: #D4A050; font-size: 12px; transition: transform 0.25s var(--eq); }
+        .jrn-chevron--open { transform: rotate(180deg); }
+        .jrn-content { padding: 0 16px 20px; max-height: 260px; overflow-y: auto; }
+        .jrn-list { list-style: none; margin-bottom: 12px; }
+        .jrn-item { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid rgba(212,160,80,0.1); }
+        .jrn-item-num { width: 22px; height: 22px; border-radius: 50%; background: rgba(212,160,80,0.12); color: #D4A050; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .jrn-item-name { flex: 1; font-size: 13px; color: #F0E4C8; line-height: 1.3; }
+        .jrn-remove { background: none; border: none; color: rgba(240,228,200,0.35); cursor: pointer; font-size: 15px; padding: 2px 6px; transition: color 0.15s; line-height: 1; }
+        .jrn-remove:hover { color: #C04830; }
+        .jrn-actions { display: flex; gap: 8px; }
+        .jrn-action-btn { flex: 1; padding: 11px; border-radius: 8px; font-size: 12px; font-weight: 500; text-align: center; cursor: pointer; transition: opacity 0.15s; font-family: 'DM Sans', sans-serif; text-decoration: none; display: block; }
+        .jrn-action-btn:hover { opacity: 0.82; }
+        .jrn-action-btn--maps { background: #C04830; color: #FFF; border: none; }
+        .jrn-action-btn--copy { background: rgba(212,160,80,0.12); border: 1px solid rgba(212,160,80,0.3); color: #D4A050; }
+        .jrn-action-btn--copy.copied { color: #6DBF8A; border-color: rgba(109,191,138,0.4); }
+
+        /* ── Card journey button ── */
+        .jrn-btn { display: inline-flex; align-items: center; gap: 5px; margin-top: 8px; padding: 7px 13px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all 0.15s; border: 1px solid rgba(212,160,80,0.35); background: transparent; color: #9A7845; }
+        .jrn-btn:hover { border-color: #D4A050; color: #D4A050; background: rgba(212,160,80,0.06); }
+        .jrn-btn--in { background: rgba(212,160,80,0.12); border-color: #D4A050; color: #D4A050; }
       `}</style>
 
       {loading && <LoadingOverlay stage={loadingStage} />}
 
       <div className="page">
         <div className="hero">
-          <h1 className="hero-title">Road<em>tripper</em><span className="beta-tag">Beta</span></h1>
+          <h1 className="hero-title">RoadTripper<span className="title-de">DE</span><span className="beta-tag">Beta</span></h1>
           <p className="hero-sub">History &amp; heritage along your route</p>
           <HeroSteps />
         </div>
@@ -637,7 +732,16 @@ export default function App() {
               <p className="empty-body">Try a longer route, or two cities further apart — our dataset covers all 16 German states.</p>
             </div>
           )}
-          {!loading && shown.map((p, i) => <Card key={p.name ?? i} poi={p} index={i} animDelay={i} />)}
+          {!loading && shown.map((p, i) => (
+            <Card
+              key={p.name ?? i}
+              poi={p}
+              index={i}
+              animDelay={i}
+              inJourney={journey.some(j => (j.name ?? j.title) === (p.name ?? p.title))}
+              onToggleJourney={() => toggleJourney(p)}
+            />
+          ))}
 
           {visibleCount < pois.length && (
             <button className="search-btn" style={{ background: 'transparent', color: '#C04830', border: '1px solid #C04830' }} onClick={() => setVisible(v => v + 6)}>Load More Stops</button>
@@ -666,9 +770,11 @@ export default function App() {
         </div>
       </div>
 
-      <a href="https://ko-fi.com/mikestuchbery" target="_blank" rel="noopener noreferrer" className="kofi">
+      <a href="https://ko-fi.com/mikestuchbery" target="_blank" rel="noopener noreferrer" className="kofi" style={journey.length ? { bottom: 72 } : {}}>
         ☕ <span className="kofi-label">Buy a coffee</span>
       </a>
+
+      <JourneyDrawer journey={journey} onRemove={toggleJourney} start={start} end={end} />
     </>
   );
 }
