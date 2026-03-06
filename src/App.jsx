@@ -369,8 +369,8 @@ export default function App() {
 
         .hero { background: #1C1208; padding: 52px 20px 0; position: relative; overflow: hidden; text-align: center; }
         .hero::after { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse 80% 60% at 50% 120%, rgba(212,160,80,0.10) 0%, transparent 70%); pointer-events: none; }
-        .hero-title { font-family: 'Playfair Display', serif; font-size: clamp(48px, 13vw, 72px); color: #F5EDDA; line-height: .95; animation: fadeUp 0.5s var(--eq) both 0.05s; }
-        .hero-title em { font-style: italic; color: #D4A050; }
+        .hero-title { font-family: 'Overpass', sans-serif; font-size: clamp(42px, 12vw, 68px); font-weight: 900; letter-spacing: -0.01em; color: #F5EDDA; line-height: .95; text-transform: uppercase; animation: fadeUp 0.5s var(--eq) both 0.05s; }
+        .hero-title .title-de { color: #D4A050; }
         .hero-title .beta-tag {
           font-family: 'DM Sans', sans-serif;
           font-style: normal;
@@ -597,7 +597,7 @@ export default function App() {
 
       <div className="page">
         <div className="hero">
-          <h1 className="hero-title">Road<em>tripper</em><span className="beta-tag">Beta</span></h1>
+          <h1 className="hero-title">RoadTripper<span className="title-de">DE</span><span className="beta-tag">Beta</span></h1>
           <p className="hero-sub">History &amp; heritage along your route</p>
           <HeroSteps />
         </div>
