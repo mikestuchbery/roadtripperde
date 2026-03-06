@@ -469,22 +469,22 @@ export default function App() {
         .ws-eyebrow {
           font-family: 'DM Sans', sans-serif;
           font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
-          color: rgba(212,160,80,0.6); margin-bottom: 8px;
+          color: #7A6035; margin-bottom: 8px;
         }
         .ws-heading {
           font-family: 'Playfair Display', serif;
           font-size: clamp(22px, 6vw, 32px);
-          font-weight: 400; color: #F0DCA8; line-height: 1.15;
+          font-weight: 400; color: #2A1A08; line-height: 1.15;
         }
         .ws-city { font-style: italic; }
-        .ws-arrow { color: #D4A050; font-style: normal; opacity: 0.7; font-size: 0.8em; }
+        .ws-arrow { color: #7A6035; font-style: normal; opacity: 1; font-size: 0.8em; }
         .ws-rule {
-          width: 40px; height: 1px; background: rgba(212,160,80,0.35);
+          width: 40px; height: 1px; background: rgba(90,60,16,0.3);
           margin: 14px auto 10px;
         }
         .ws-meta {
           font-family: 'DM Sans', sans-serif;
-          font-size: 12px; color: rgba(212,160,80,0.65);
+          font-size: 12px; color: #7A6035;
           letter-spacing: 0.06em;
         }
         .ws-meta-dot { opacity: 0.5; }
