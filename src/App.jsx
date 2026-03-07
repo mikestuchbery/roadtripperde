@@ -357,6 +357,33 @@ function JourneyDrawer({ journey, onRemove, start, end }) {
   );
 }
 
+function UpcomingUpgrades() {
+  const [open, setOpen] = useState(false);
+  const upgrades = [
+    "Filter POI by type",
+    "\"I'm Feeling Lucky\" daytrip suggester",
+  ];
+
+  return (
+    <div className={`upg-wrap${open ? " upg-wrap--open" : ""}`}>
+      <button className="upg-toggle" onClick={() => setOpen(v => !v)} aria-expanded={open}>
+        <span className="upg-label">Upcoming Upgrades</span>
+        <span className={`upg-chevron${open ? " upg-chevron--open" : ""}`}>▲</span>
+      </button>
+      {open && (
+        <div className="upg-box">
+          <p className="upg-title">What&apos;s coming next</p>
+          <ul className="upg-list">
+            {upgrades.map((item) => (
+              <li key={item} className="upg-item">{item}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ========= MAIN APP ========= */
 export default function App() {
   const [start, setStart] = useState("");
@@ -686,6 +713,56 @@ export default function App() {
         .jrn-btn { display: inline-flex; align-items: center; gap: 5px; margin-top: 8px; padding: 7px 13px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all 0.15s; border: 1px solid rgba(212,160,80,0.35); background: transparent; color: #9A7845; }
         .jrn-btn:hover { border-color: #D4A050; color: #D4A050; background: rgba(212,160,80,0.06); }
         .jrn-btn--in { background: rgba(212,160,80,0.12); border-color: #D4A050; color: #D4A050; }
+
+        /* ── Upcoming upgrades slider ── */
+        .upg-wrap {
+          position: fixed;
+          left: 12px;
+          right: 12px;
+          bottom: 12px;
+          z-index: 1001;
+          pointer-events: none;
+        }
+        .upg-wrap--open { bottom: 16px; }
+        .upg-toggle {
+          width: 100%;
+          border: 1px solid rgba(212,160,80,0.35);
+          background: #1C1208;
+          color: #D4A050;
+          border-radius: 10px;
+          padding: 10px 14px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 12px;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          cursor: pointer;
+          pointer-events: auto;
+        }
+        .upg-chevron { transition: transform 0.2s var(--eq); }
+        .upg-chevron--open { transform: rotate(180deg); }
+        .upg-box {
+          margin-top: 8px;
+          border-radius: 12px;
+          border: 1px solid rgba(212,160,80,0.35);
+          background: #FAF4E4;
+          box-shadow: 0 10px 32px rgba(0,0,0,0.2);
+          padding: 14px;
+          pointer-events: auto;
+          animation: fadeUp 0.25s var(--eq) both;
+        }
+        .upg-title {
+          font-family: 'Lora', serif;
+          font-style: italic;
+          font-size: 13px;
+          color: #7A6035;
+          margin-bottom: 8px;
+        }
+        .upg-list { margin: 0; padding-left: 18px; color: #3A2A10; }
+        .upg-item { font-size: 13px; line-height: 1.6; margin-bottom: 4px; }
+        .upg-item:last-child { margin-bottom: 0; }
       `}</style>
 
       {loading && <LoadingOverlay stage={loadingStage} />}
@@ -775,6 +852,7 @@ export default function App() {
       </a>
 
       <JourneyDrawer journey={journey} onRemove={toggleJourney} start={start} end={end} />
+      <UpcomingUpgrades />
     </>
   );
 }
