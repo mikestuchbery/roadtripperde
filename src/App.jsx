@@ -5,6 +5,7 @@ import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
 import { MapContainer, TileLayer, Polyline, Marker, Popup } from "react-leaflet";
+import { Analytics } from "@vercel/analytics/react";
 
 // Fix Leaflet Icons
 delete L.Icon.Default.prototype._getIconUrl;
@@ -853,6 +854,7 @@ export default function App() {
 
       <JourneyDrawer journey={journey} onRemove={toggleJourney} start={start} end={end} />
       <UpcomingUpgrades />
+      <Analytics />
     </>
   );
 }
